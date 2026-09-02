@@ -403,9 +403,9 @@ function metricSection(title, unitNote, dataFY27, dataFY26) {
         </div>
       </div>
       <div class="legend-row">
-        <div class="legend-item"><span class="legend-dot" style="background:var(--target)"></span> Target FY27</div>
-        <div class="legend-item"><span class="legend-dot" style="background:var(--actual)"></span> Actual FY27</div>
-        <div class="legend-item"><span class="legend-dot" style="background:#C7CDD6"></span> Actual FY26 (LY)</div>
+        <div class="legend-item"><span class="legend-dot" style="background:var(--target)"></span> 100% Target</div>
+        <div class="legend-item"><span class="legend-dot" style="background:var(--actual)"></span> Achievement % FY27</div>
+        <div class="legend-item"><span class="legend-dot" style="background:#C7CDD6"></span> Achievement % FY26 (LY)</div>
       </div>
       <div class="chart-wrap"><canvas id="chart_${id}"></canvas></div>
       ${cutoff < 11 ? `<div class="not-reported-note">Actuals reported through ${MONTHS_FY27[cutoff]}; later months awaiting data.</div>` : ''}
@@ -416,9 +416,23 @@ function metricSection(title, unitNote, dataFY27, dataFY26) {
 function buildMetricChart(canvasId, dataFY27, dataFY26) {
   const targetFY27 = getTargetSeries(dataFY27, MONTHS_FY27);
   const actualFY27raw = getMonthlySeries(dataFY27, MONTHS_FY27);
+  const targetFY26 = getTargetSeries(dataFY26, MONTHS_FY26);
   const actualFY26raw = getMonthlySeries(dataFY26, MONTHS_FY26);
   const cutoff = lastReportedIndex([actualFY27raw]);
-  const actualFY27 = actualFY27raw.map((v, i) => (i <= cutoff ? v : null));
+
+  const achievementPct = (target, actual) => {
+    if (target === null || target === undefined || target === 0) return null;
+    if (actual === null || actual === undefined) return null;
+    return Math.round((actual / target) * 1000) / 10;
+  };
+
+  const achievementFY27 = MONTHS_FY27.map((_, i) =>
+    i <= cutoff ? achievementPct(targetFY27[i], actualFY27raw[i]) : null
+  );
+  const achievementFY26 = MONTHS_FY26.map((_, i) =>
+    achievementPct(targetFY26[i], actualFY26raw[i])
+  );
+  const targetLine100 = MONTHS_FY27.map(() => 100);
 
   const ctx = document.getElementById(canvasId).getContext('2d');
   const chart = new Chart(ctx, {
@@ -427,17 +441,17 @@ function buildMetricChart(canvasId, dataFY27, dataFY26) {
       labels: MONTHS_FY27,
       datasets: [
         {
-          label: 'Target FY27', data: targetFY27,
-          borderColor: '#3B6E8F', backgroundColor: 'rgba(59,110,143,0.08)',
-          borderDash: [4, 3], tension: 0.2, pointRadius: 2, fill: false,
+          label: '100% Target', data: targetLine100,
+          borderColor: '#3B6E8F', backgroundColor: 'transparent',
+          borderDash: [4, 3], tension: 0, pointRadius: 0, fill: false,
         },
         {
-          label: 'Actual FY27', data: actualFY27,
+          label: 'Achievement % FY27', data: achievementFY27,
           borderColor: '#D97B29', backgroundColor: 'rgba(217,123,41,0.12)',
           tension: 0.2, pointRadius: 3, fill: true,
         },
         {
-          label: 'Actual FY26', data: actualFY26raw,
+          label: 'Achievement % FY26', data: achievementFY26,
           borderColor: '#C7CDD6', backgroundColor: 'transparent',
           borderDash: [2, 2], tension: 0.2, pointRadius: 0, fill: false,
         },
@@ -446,7 +460,7 @@ function buildMetricChart(canvasId, dataFY27, dataFY26) {
     options: {
       responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: false } },
-      scales: { y: { beginAtZero: true } },
+      scales: { y: { ticks: { callback: v => v + '%' } } },
     },
   });
   return chart;
