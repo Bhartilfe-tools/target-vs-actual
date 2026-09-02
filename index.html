@@ -1,0 +1,559 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Target vs Actual — Channel Performance</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #F5F6F8;
+    --surface: #FFFFFF;
+    --ink: #1A2332;
+    --muted: #6B7280;
+    --border: #E4E7EC;
+    --target: #3B6E8F;
+    --target-tint: #E8EFF3;
+    --actual: #D97B29;
+    --actual-tint: #FBEDDD;
+    --good: #2F9E64;
+    --good-tint: #E6F6EC;
+    --bad: #D14343;
+    --bad-tint: #FCEAEA;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'IBM Plex Sans', sans-serif;
+  }
+
+  .num { font-family: 'IBM Plex Mono', monospace; font-weight: 600; }
+
+  header {
+    background: var(--ink);
+    padding: 22px 32px 18px;
+  }
+
+  header h1 {
+    margin: 0;
+    color: #fff;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+
+  header .sub {
+    color: #9AA5B8;
+    font-size: 13px;
+    margin-top: 3px;
+  }
+
+  .sample-banner {
+    background: var(--actual);
+    color: #fff;
+    text-align: center;
+    font-size: 12.5px;
+    font-weight: 600;
+    padding: 7px;
+  }
+
+  .tab-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 32px;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+  }
+
+  .tab-btn {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid transparent;
+    border-radius: 6px;
+    padding: 7px 14px;
+    cursor: pointer;
+  }
+
+  .tab-btn:hover { background: var(--bg); }
+
+  .tab-btn.active {
+    background: var(--ink);
+    color: #fff;
+  }
+
+  .tab-btn.company-tab {
+    border: 1.5px solid var(--target);
+    font-weight: 700;
+  }
+  .tab-btn.company-tab.active {
+    background: var(--target);
+    border-color: var(--target);
+  }
+
+  main {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 24px 32px 60px;
+  }
+
+  .channel-title {
+    font-size: 26px;
+    font-weight: 700;
+    margin: 4px 0 2px;
+  }
+
+  .channel-sub {
+    color: var(--muted);
+    font-size: 13px;
+    margin-bottom: 22px;
+  }
+
+  .section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 22px 24px;
+    margin-bottom: 20px;
+  }
+
+  .section-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .section-head h2 {
+    font-size: 16px;
+    font-weight: 700;
+    margin: 0;
+  }
+
+  .section-head .unit-note {
+    font-size: 11.5px;
+    color: var(--muted);
+  }
+
+  .stat-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+
+  .stat-card {
+    background: var(--bg);
+    border-radius: 8px;
+    padding: 12px 14px;
+  }
+
+  .stat-card .label {
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    margin-bottom: 5px;
+  }
+
+  .stat-card .value {
+    font-size: 20px;
+  }
+
+  .stat-card .value.target { color: var(--target); }
+  .stat-card .value.actual { color: var(--actual); }
+  .stat-card .delta {
+    font-size: 11.5px;
+    margin-top: 3px;
+    font-weight: 600;
+  }
+  .delta.good { color: var(--good); }
+  .delta.bad { color: var(--bad); }
+
+  .chart-wrap {
+    height: 260px;
+    position: relative;
+  }
+
+  .legend-row {
+    display: flex;
+    gap: 18px;
+    margin-bottom: 10px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+  .cohort-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 10px;
+    margin-bottom: 4px;
+  }
+
+  .cohort-card {
+    background: var(--bg);
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 12px 10px;
+    cursor: pointer;
+    transition: border-color 0.12s ease;
+  }
+
+  .cohort-card:hover { border-color: var(--target); }
+  .cohort-card.active { border-color: var(--target); background: var(--target-tint); }
+
+  .cohort-card .cohort-label {
+    font-size: 12px;
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+
+  .cohort-card .cohort-actual {
+    font-size: 22px;
+    line-height: 1;
+  }
+
+  .cohort-card .cohort-target {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+
+  .cohort-card .gap-tag {
+    display: inline-block;
+    margin-top: 6px;
+    font-size: 10.5px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+  .gap-tag.good { background: var(--good-tint); color: var(--good); }
+  .gap-tag.bad { background: var(--bad-tint); color: var(--bad); }
+
+  .cohort-card .not-tracked {
+    color: var(--muted);
+    font-size: 11.5px;
+    font-style: italic;
+    padding: 14px 0;
+  }
+
+  .not-reported-note {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 10px;
+    font-style: italic;
+  }
+
+  @media (max-width: 800px) {
+    .stat-row { grid-template-columns: repeat(2, 1fr); }
+    .cohort-grid { grid-template-columns: repeat(2, 1fr); }
+    header, .tab-bar, main { padding-left: 16px; padding-right: 16px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Target vs Actual — Channel Performance</h1>
+  <div class="sub">FY27 vs FY26 &middot; Accrual, Cash Collection &amp; Persistency (13M&ndash;61M) &middot; Board Target</div>
+</header>
+
+<div class="tab-bar" id="tab-bar"></div>
+
+<main id="main"></main>
+
+<script>
+const RAW_DATA = {"Company": {"accrual": {"FY27": {"Apr'26": {"target": 42.72, "actual": 39.91}, "May'26": {"target": 148.18, "actual": 141.55}, "Jun'26": {"target": 205.01, "actual": 177.67}, "Jul'26": {"target": 162.32, "actual": 151.65}, "Aug'26": {"target": 157.24, "actual": 0}, "Sep'26": {"target": 233.09, "actual": 0}, "Oct'26": {"target": 156.81, "actual": 0}, "Nov'26": {"target": 170.5, "actual": 0}, "Dec'26": {"target": 218.6, "actual": 0}, "Jan'27": {"target": 175.58, "actual": 0}, "Feb'27": {"target": 207.67, "actual": 0}, "Mar'27": {"target": 572.27, "actual": 0}}, "FY26": {"Apr'25": {"target": 41.0, "actual": 31.25}, "May'25": {"target": 150.0, "actual": 138.05}, "Jun'25": {"target": 210.0, "actual": 202.02}, "Jul'25": {"target": 167.0, "actual": 150.5}, "Aug'25": {"target": 169.0, "actual": 152.52}, "Sep'25": {"target": 205.0, "actual": 226.2}, "Oct'25": {"target": 164.0, "actual": 147.94}, "Nov'25": {"target": 173.0, "actual": 158.21}, "Dec'25": {"target": 265.01, "actual": 192.29}, "Jan'26": {"target": 175.0, "actual": 160.23}, "Feb'26": {"target": 212.0, "actual": 192.96}, "Mar'26": {"target": 519.1, "actual": 430.23}}}, "cash": {"FY27": {"Apr'26": {"target": 170.97, "actual": 158.67}, "May'26": {"target": 143.07, "actual": 138.28}, "Jun'26": {"target": 190.91, "actual": 163.21}, "Jul'26": {"target": 171.21, "actual": 163.4}, "Aug'26": {"target": 154.85, "actual": 0}, "Sep'26": {"target": 212.12, "actual": 0}, "Oct'26": {"target": 181.49, "actual": 0}, "Nov'26": {"target": 154.26, "actual": 0}, "Dec'26": {"target": 184.87, "actual": 0}, "Jan'27": {"target": 204.87, "actual": 0}, "Feb'27": {"target": 208.26, "actual": 0}, "Mar'27": {"target": 464.83, "actual": 0}}, "FY26": {"Apr'25": {"target": 186.27, "actual": 153.78}, "May'25": {"target": 147.41, "actual": 131.61}, "Jun'25": {"target": 175.26, "actual": 178.87}, "Jul'25": {"target": 179.43, "actual": 162.1}, "Aug'25": {"target": 164.74, "actual": 149.1}, "Sep'25": {"target": 194.98, "actual": 209.11}, "Oct'25": {"target": 186.71, "actual": 170.88}, "Nov'25": {"target": 171.5, "actual": 148.83}, "Dec'25": {"target": 227.69, "actual": 157.24}, "Jan'26": {"target": 217.44, "actual": 189.82}, "Feb'26": {"target": 214.06, "actual": 184.48}, "Mar'26": {"target": 450.33, "actual": 349.03}}}, "persistency": {"13M": {"FY27": {"Apr'26": {"target": 70.9, "actual": 64.5}, "May'26": {"target": 71.5, "actual": 65.4}, "Jun'26": {"target": 72.2, "actual": 66.8}, "Jul'26": {"target": 73.1, "actual": 67.4}, "Aug'26": {"target": 73.8, "actual": 0}, "Sep'26": {"target": 74.5, "actual": 0}, "Oct'26": {"target": 75.1, "actual": 0}, "Nov'26": {"target": 75.7, "actual": 0}, "Dec'26": {"target": 76.2, "actual": 0}, "Jan'27": {"target": 76.9, "actual": 0}, "Feb'27": {"target": 77.5, "actual": 0}, "Mar'27": {"target": 78.0, "actual": 0}}, "FY26": {"Apr'25": {"target": 76.6, "actual": 70.9}, "May'25": {"target": 77.4, "actual": 71.5}, "Jun'25": {"target": 77.9, "actual": 71.9}, "Jul'25": {"target": 77.8, "actual": 71.7}, "Aug'25": {"target": 77.5, "actual": 71.7}, "Sep'25": {"target": 77.1, "actual": 71.9}, "Oct'25": {"target": 77.0, "actual": 71.5}, "Nov'25": {"target": 77.1, "actual": 71.5}, "Dec'25": {"target": 77.2, "actual": 65.9}, "Jan'26": {"target": 76.1, "actual": 66.0}, "Feb'26": {"target": 77.6, "actual": 66.5}, "Mar'26": {"target": 80.6, "actual": 66.3}}}, "25M": {"FY27": {"Apr'26": {"target": 57.1, "actual": 49.1}, "May'26": {"target": 57.2, "actual": 49.2}, "Jun'26": {"target": 57.2, "actual": 49.3}, "Jul'26": {"target": 57.2, "actual": 49.2}, "Aug'26": {"target": 57.4, "actual": 0}, "Sep'26": {"target": 57.4, "actual": 0}, "Oct'26": {"target": 57.4, "actual": 0}, "Nov'26": {"target": 57.5, "actual": 0}, "Dec'26": {"target": 57.6, "actual": 0}, "Jan'27": {"target": 57.7, "actual": 0}, "Feb'27": {"target": 57.9, "actual": 0}, "Mar'27": {"target": 58.0, "actual": 0}}, "FY26": {"Apr'25": {"target": 62.3, "actual": 57.7}, "May'25": {"target": 62.5, "actual": 58.2}, "Jun'25": {"target": 62.6, "actual": 58.7}, "Jul'25": {"target": 62.5, "actual": 58.5}, "Aug'25": {"target": 62.6, "actual": 58.3}, "Sep'25": {"target": 62.7, "actual": 57.9}, "Oct'25": {"target": 62.8, "actual": 57.7}, "Nov'25": {"target": 62.9, "actual": 57.6}, "Dec'25": {"target": 63.1, "actual": 56.0}, "Jan'26": {"target": 63.2, "actual": 55.0}, "Feb'26": {"target": 63.7, "actual": 54.6}, "Mar'26": {"target": 64.5, "actual": 53.4}}}, "37M": {"FY27": {"Apr'26": {"target": 52.7, "actual": 51.8}, "May'26": {"target": 51.8, "actual": 52.1}, "Jun'26": {"target": 51.8, "actual": 52.2}, "Jul'26": {"target": 51.8, "actual": 51.6}, "Aug'26": {"target": 51.8, "actual": 0}, "Sep'26": {"target": 51.8, "actual": 0}, "Oct'26": {"target": 51.8, "actual": 0}, "Nov'26": {"target": 51.9, "actual": 0}, "Dec'26": {"target": 51.9, "actual": 0}, "Jan'27": {"target": 51.9, "actual": 0}, "Feb'27": {"target": 52.0, "actual": 0}, "Mar'27": {"target": 52.0, "actual": 0}}, "FY26": {"Apr'25": {"target": 50.5, "actual": 51.5}, "May'25": {"target": 50.9, "actual": 51.9}, "Jun'25": {"target": 51.3, "actual": 52.7}, "Jul'25": {"target": 51.1, "actual": 52.9}, "Aug'25": {"target": 51.8, "actual": 53.1}, "Sep'25": {"target": 52.2, "actual": 53.9}, "Oct'25": {"target": 52.0, "actual": 53.9}, "Nov'25": {"target": 52.8, "actual": 54.1}, "Dec'25": {"target": 53.6, "actual": 53.4}, "Jan'26": {"target": 53.5, "actual": 53.2}, "Feb'26": {"target": 54.4, "actual": 54.1}, "Mar'26": {"target": 55.0, "actual": 52.1}}}, "49M": {"FY27": {"Apr'26": {"target": 49.6, "actual": 45.0}, "May'26": {"target": 45.1, "actual": 45.2}, "Jun'26": {"target": 45.4, "actual": 44.8}, "Jul'26": {"target": 45.6, "actual": 44.7}, "Aug'26": {"target": 46.0, "actual": 0}, "Sep'26": {"target": 46.3, "actual": 0}, "Oct'26": {"target": 46.6, "actual": 0}, "Nov'26": {"target": 46.9, "actual": 0}, "Dec'26": {"target": 47.2, "actual": 0}, "Jan'27": {"target": 47.5, "actual": 0}, "Feb'27": {"target": 47.9, "actual": 0}, "Mar'27": {"target": 48.0, "actual": 0}}, "FY26": {"Apr'25": {"target": 44.5, "actual": 46.7}, "May'25": {"target": 44.7, "actual": 47.5}, "Jun'25": {"target": 45.0, "actual": 48.3}, "Jul'25": {"target": 45.0, "actual": 48.5}, "Aug'25": {"target": 45.4, "actual": 49.2}, "Sep'25": {"target": 45.6, "actual": 49.7}, "Oct'25": {"target": 45.7, "actual": 49.8}, "Nov'25": {"target": 45.8, "actual": 50.1}, "Dec'25": {"target": 46.0, "actual": 49.3}, "Jan'26": {"target": 45.8, "actual": 48.8}, "Feb'26": {"target": 46.3, "actual": 49.3}, "Mar'26": {"target": 47.2, "actual": 45.0}}}, "61M": {"FY27": {"Apr'26": {"target": 39.1, "actual": 34.5}, "May'26": {"target": 38.5, "actual": 35.0}, "Jun'26": {"target": 38.5, "actual": 38.2}, "Jul'26": {"target": 38.5, "actual": 38.5}, "Aug'26": {"target": 38.7, "actual": 0}, "Sep'26": {"target": 38.8, "actual": 0}, "Oct'26": {"target": 39.0, "actual": 0}, "Nov'26": {"target": 39.0, "actual": 0}, "Dec'26": {"target": 39.0, "actual": 0}, "Jan'27": {"target": 39.0, "actual": 0}, "Feb'27": {"target": 38.9, "actual": 0}, "Mar'27": {"target": 39.0, "actual": 0}}, "FY26": {"Apr'25": {"target": 39.8, "actual": 37.2}, "May'25": {"target": 40.1, "actual": 37.2}, "Jun'25": {"target": 40.5, "actual": 37.8}, "Jul'25": {"target": 39.9, "actual": 37.7}, "Aug'25": {"target": 39.7, "actual": 37.4}, "Sep'25": {"target": 39.3, "actual": 37.2}, "Oct'25": {"target": 38.9, "actual": 36.8}, "Nov'25": {"target": 39.3, "actual": 36.3}, "Dec'25": {"target": 39.7, "actual": 36.1}, "Jan'26": {"target": 40.4, "actual": 36.6}, "Feb'26": {"target": 40.7, "actual": 37.0}, "Mar'26": {"target": 41.2, "actual": 33.8}}}}}, "Agency": {"accrual": {"FY27": {"Apr'26": {"target": 6.77, "actual": 11.63}, "May'26": {"target": 59.14, "actual": 59.02}, "Jun'26": {"target": 104.78, "actual": 89.24}, "Jul'26": {"target": 63.61, "actual": 61.78}, "Aug'26": {"target": 68.55, "actual": 0}, "Sep'26": {"target": 111.63, "actual": 0}, "Oct'26": {"target": 68.76, "actual": 0}, "Nov'26": {"target": 69.52, "actual": 0}, "Dec'26": {"target": 112.61, "actual": 0}, "Jan'27": {"target": 65.21, "actual": 0}, "Feb'27": {"target": 90.48, "actual": 0}, "Mar'27": {"target": 252.44, "actual": 0}}, "FY26": {"Apr'25": {"target": 12.22, "actual": 5.25}, "May'25": {"target": 65.13, "actual": 57.97}, "Jun'25": {"target": 107.3, "actual": 105.55}, "Jul'25": {"target": 66.57, "actual": 63.13}, "Aug'25": {"target": 72.14, "actual": 64.31}, "Sep'25": {"target": 93.94, "actual": 111.93}, "Oct'25": {"target": 72.61, "actual": 67.76}, "Nov'25": {"target": 76.49, "actual": 69.95}, "Dec'25": {"target": 134.28, "actual": 106.06}, "Jan'26": {"target": 70.33, "actual": 62.57}, "Feb'26": {"target": 92.02, "actual": 84.53}, "Mar'26": {"target": 266.5, "actual": 206.21}}}, "cash": {"FY27": {"Apr'26": {"target": 70.17, "actual": 70.42}, "May'26": {"target": 58.04, "actual": 56.14}, "Jun'26": {"target": 92.95, "actual": 75.24}, "Jul'26": {"target": 72.96, "actual": 71.47}, "Aug'26": {"target": 66.89, "actual": 0}, "Sep'26": {"target": 106.17, "actual": 0}, "Oct'26": {"target": 77.8, "actual": 0}, "Nov'26": {"target": 69.08, "actual": 0}, "Dec'26": {"target": 87.99, "actual": 0}, "Jan'27": {"target": 86.79, "actual": 0}, "Feb'27": {"target": 92.11, "actual": 0}, "Mar'27": {"target": 211.97, "actual": 0}}, "FY26": {"Apr'25": {"target": 88.76, "actual": 69.58}, "May'25": {"target": 64.41, "actual": 56.84}, "Jun'25": {"target": 83.64, "actual": 88.77}, "Jul'25": {"target": 79.88, "actual": 74.6}, "Aug'25": {"target": 70.28, "actual": 62.86}, "Sep'25": {"target": 90.11, "actual": 100.6}, "Oct'25": {"target": 81.56, "actual": 79.85}, "Nov'25": {"target": 76.72, "actual": 66.66}, "Dec'25": {"target": 109.07, "actual": 81.04}, "Jan'26": {"target": 98.66, "actual": 85.36}, "Feb'26": {"target": 92.21, "actual": 78.95}, "Mar'26": {"target": 224.19, "actual": 164.74}}}, "persistency": {"13M": {"FY27": {"Apr'26": {"target": 80.7, "actual": 75.0}, "May'26": {"target": 80.8, "actual": 75.2}, "Jun'26": {"target": 80.9, "actual": 75.6}, "Jul'26": {"target": 81.1, "actual": 75.3}, "Aug'26": {"target": 81.2, "actual": 0}, "Sep'26": {"target": 81.3, "actual": 0}, "Oct'26": {"target": 81.4, "actual": 0}, "Nov'26": {"target": 81.5, "actual": 0}, "Dec'26": {"target": 81.6, "actual": 0}, "Jan'27": {"target": 81.8, "actual": 0}, "Feb'27": {"target": 81.9, "actual": 0}, "Mar'27": {"target": 82.0, "actual": 0}}, "FY26": {"Apr'25": {"target": 81.1, "actual": 76.6}, "May'25": {"target": 82.2, "actual": 77.4}, "Jun'25": {"target": 82.9, "actual": 77.9}, "Jul'25": {"target": 82.8, "actual": 78.5}, "Aug'25": {"target": 82.7, "actual": 78.7}, "Sep'25": {"target": 82.7, "actual": 79.1}, "Oct'25": {"target": 83.3, "actual": 78.1}, "Nov'25": {"target": 83.9, "actual": 78.7}, "Dec'25": {"target": 84.1, "actual": 75.2}, "Jan'26": {"target": 83.1, "actual": 75.2}, "Feb'26": {"target": 84.1, "actual": 75.8}, "Mar'26": {"target": 87.0, "actual": 76.1}}}, "25M": {"FY27": {"Apr'26": {"target": 66.0, "actual": 60.6}, "May'26": {"target": 66.0, "actual": 60.8}, "Jun'26": {"target": 66.1, "actual": 61.3}, "Jul'26": {"target": 66.1, "actual": 61.8}, "Aug'26": {"target": 66.1, "actual": 0}, "Sep'26": {"target": 66.1, "actual": 0}, "Oct'26": {"target": 66.2, "actual": 0}, "Nov'26": {"target": 66.2, "actual": 0}, "Dec'26": {"target": 66.2, "actual": 0}, "Jan'27": {"target": 66.2, "actual": 0}, "Feb'27": {"target": 66.3, "actual": 0}, "Mar'27": {"target": 66.3, "actual": 0}}, "FY26": {"Apr'25": {"target": 69.2, "actual": 61.7}, "May'25": {"target": 69.2, "actual": 62.9}, "Jun'25": {"target": 69.4, "actual": 63.7}, "Jul'25": {"target": 69.2, "actual": 63.7}, "Aug'25": {"target": 69.3, "actual": 63.7}, "Sep'25": {"target": 69.4, "actual": 64.2}, "Oct'25": {"target": 69.4, "actual": 64.7}, "Nov'25": {"target": 69.5, "actual": 65.4}, "Dec'25": {"target": 69.7, "actual": 64.4}, "Jan'26": {"target": 69.6, "actual": 63.4}, "Feb'26": {"target": 69.8, "actual": 63.5}, "Mar'26": {"target": 70.0, "actual": 62.9}}}, "37M": {"FY27": {"Apr'26": {"target": 55.0, "actual": 55.0}, "May'26": {"target": 55.0, "actual": 55.9}, "Jun'26": {"target": 55.1, "actual": 56.3}, "Jul'26": {"target": 55.1, "actual": 55.7}, "Aug'26": {"target": 55.2, "actual": 0}, "Sep'26": {"target": 55.2, "actual": 0}, "Oct'26": {"target": 55.3, "actual": 0}, "Nov'26": {"target": 55.3, "actual": 0}, "Dec'26": {"target": 55.4, "actual": 0}, "Jan'27": {"target": 55.4, "actual": 0}, "Feb'27": {"target": 55.5, "actual": 0}, "Mar'27": {"target": 55.5, "actual": 0}}, "FY26": {"Apr'25": {"target": 56.6, "actual": 57.7}, "May'25": {"target": 56.7, "actual": 57.8}, "Jun'25": {"target": 57.2, "actual": 59.3}, "Jul'25": {"target": 57.1, "actual": 59.3}, "Aug'25": {"target": 57.3, "actual": 59.3}, "Sep'25": {"target": 57.8, "actual": 60.1}, "Oct'25": {"target": 57.5, "actual": 59.7}, "Nov'25": {"target": 58.3, "actual": 59.4}, "Dec'25": {"target": 59.0, "actual": 58.5}, "Jan'26": {"target": 58.8, "actual": 58.0}, "Feb'26": {"target": 59.5, "actual": 59.2}, "Mar'26": {"target": 60.2, "actual": 57.0}}}, "49M": {"FY27": {"Apr'26": {"target": 57.0, "actual": 49.8}, "May'26": {"target": 48.4, "actual": 49.6}, "Jun'26": {"target": 48.8, "actual": 49.1}, "Jul'26": {"target": 49.2, "actual": 48.8}, "Aug'26": {"target": 49.6, "actual": 0}, "Sep'26": {"target": 50.0, "actual": 0}, "Oct'26": {"target": 50.5, "actual": 0}, "Nov'26": {"target": 50.9, "actual": 0}, "Dec'26": {"target": 51.3, "actual": 0}, "Jan'27": {"target": 51.7, "actual": 0}, "Feb'27": {"target": 52.1, "actual": 0}, "Mar'27": {"target": 52.5, "actual": 0}}, "FY26": {"Apr'25": {"target": 52.7, "actual": 54.5}, "May'25": {"target": 52.8, "actual": 55.6}, "Jun'25": {"target": 53.1, "actual": 57.3}, "Jul'25": {"target": 53.1, "actual": 57.3}, "Aug'25": {"target": 53.0, "actual": 57.4}, "Sep'25": {"target": 53.2, "actual": 57.6}, "Oct'25": {"target": 53.4, "actual": 57.0}, "Nov'25": {"target": 53.2, "actual": 57.1}, "Dec'25": {"target": 53.7, "actual": 55.7}, "Jan'26": {"target": 53.5, "actual": 54.8}, "Feb'26": {"target": 54.5, "actual": 55.3}, "Mar'26": {"target": 55.5, "actual": 50.1}}}, "61M": {"FY27": {"Apr'26": {"target": 48.0, "actual": 42.6}, "May'26": {"target": 48.0, "actual": 43.3}, "Jun'26": {"target": 48.0, "actual": 46.5}, "Jul'26": {"target": 48.0, "actual": 46.5}, "Aug'26": {"target": 48.0, "actual": 0}, "Sep'26": {"target": 48.0, "actual": 0}, "Oct'26": {"target": 48.0, "actual": 0}, "Nov'26": {"target": 48.0, "actual": 0}, "Dec'26": {"target": 48.0, "actual": 0}, "Jan'27": {"target": 48.0, "actual": 0}, "Feb'27": {"target": 48.0, "actual": 0}, "Mar'27": {"target": 48.0, "actual": 0}}, "FY26": {"Apr'25": {"target": 47.5, "actual": 45.9}, "May'25": {"target": 47.9, "actual": 45.8}, "Jun'25": {"target": 48.5, "actual": 46.3}, "Jul'25": {"target": 48.0, "actual": 46.7}, "Aug'25": {"target": 48.4, "actual": 46.7}, "Sep'25": {"target": 48.6, "actual": 47.1}, "Oct'25": {"target": 48.5, "actual": 47.1}, "Nov'25": {"target": 48.9, "actual": 47.0}, "Dec'25": {"target": 49.5, "actual": 47.0}, "Jan'26": {"target": 49.3, "actual": 48.2}, "Feb'26": {"target": 49.5, "actual": 48.2}, "Mar'26": {"target": 50.0, "actual": 43.7}}}}}, "DD": {"accrual": {"FY27": {"Apr'26": {"target": 0.2, "actual": 1.61}, "May'26": {"target": 18.7, "actual": 18.73}, "Jun'26": {"target": 26.38, "actual": 23.96}, "Jul'26": {"target": 23.88, "actual": 25.08}, "Aug'26": {"target": 19.58, "actual": 0}, "Sep'26": {"target": 28.4, "actual": 0}, "Oct'26": {"target": 23.71, "actual": 0}, "Nov'26": {"target": 19.58, "actual": 0}, "Dec'26": {"target": 29.38, "actual": 0}, "Jan'27": {"target": 26.9, "actual": 0}, "Feb'27": {"target": 33.4, "actual": 0}, "Mar'27": {"target": 85.19, "actual": 0}}, "FY26": {"Apr'25": {"target": 1.53, "actual": 0.15}, "May'25": {"target": 16.49, "actual": 13.82}, "Jun'25": {"target": 21.59, "actual": 20.12}, "Jul'25": {"target": 19.46, "actual": 17.19}, "Aug'25": {"target": 18.51, "actual": 15.85}, "Sep'25": {"target": 22.63, "actual": 27.12}, "Oct'25": {"target": 19.27, "actual": 17.17}, "Nov'25": {"target": 20.1, "actual": 17.92}, "Dec'25": {"target": 32.62, "actual": 22.24}, "Jan'26": {"target": 20.22, "actual": 20.9}, "Feb'26": {"target": 24.67, "actual": 24.39}, "Mar'26": {"target": 65.6, "actual": 54.14}}}, "cash": {"FY27": {"Apr'26": {"target": 17.27, "actual": 16.17}, "May'26": {"target": 18.48, "actual": 18.11}, "Jun'26": {"target": 23.74, "actual": 21.22}, "Jul'26": {"target": 23.38, "actual": 24.62}, "Aug'26": {"target": 20.45, "actual": 0}, "Sep'26": {"target": 25.93, "actual": 0}, "Oct'26": {"target": 24.85, "actual": 0}, "Nov'26": {"target": 16.75, "actual": 0}, "Dec'26": {"target": 24.89, "actual": 0}, "Jan'27": {"target": 28.85, "actual": 0}, "Feb'27": {"target": 31.35, "actual": 0}, "Mar'27": {"target": 77.27, "actual": 0}}, "FY26": {"Apr'25": {"target": 18.65, "actual": 12.93}, "May'25": {"target": 16.62, "actual": 13.19}, "Jun'25": {"target": 18.23, "actual": 18.43}, "Jul'25": {"target": 19.67, "actual": 17.67}, "Aug'25": {"target": 18.55, "actual": 15.5}, "Sep'25": {"target": 22.6, "actual": 26.96}, "Oct'25": {"target": 21.82, "actual": 18.01}, "Nov'25": {"target": 19.46, "actual": 16.19}, "Dec'25": {"target": 28.23, "actual": 19.68}, "Jan'26": {"target": 25.15, "actual": 21.9}, "Feb'26": {"target": 25.95, "actual": 23.29}, "Mar'26": {"target": 55.2, "actual": 44.05}}}, "persistency": {"13M": {"FY27": {"Apr'26": {"target": 82.9, "actual": 78.2}, "May'26": {"target": 83.0, "actual": 78.2}, "Jun'26": {"target": 83.1, "actual": 78.5}, "Jul'26": {"target": 83.2, "actual": 78.3}, "Aug'26": {"target": 83.3, "actual": 0}, "Sep'26": {"target": 83.4, "actual": 0}, "Oct'26": {"target": 83.5, "actual": 0}, "Nov'26": {"target": 83.6, "actual": 0}, "Dec'26": {"target": 83.7, "actual": 0}, "Jan'27": {"target": 83.8, "actual": 0}, "Feb'27": {"target": 83.9, "actual": 0}, "Mar'27": {"target": 84.0, "actual": 0}}, "FY26": {"Apr'25": {"target": 77.9, "actual": 75.9}, "May'25": {"target": 78.8, "actual": 78.2}, "Jun'25": {"target": 79.5, "actual": 80.0}, "Jul'25": {"target": 80.4, "actual": 79.9}, "Aug'25": {"target": 80.5, "actual": 79.2}, "Sep'25": {"target": 80.4, "actual": 81.2}, "Oct'25": {"target": 81.1, "actual": 81.2}, "Nov'25": {"target": 80.6, "actual": 82.2}, "Dec'25": {"target": 80.9, "actual": 78.3}, "Jan'26": {"target": 79.8, "actual": 79.0}, "Feb'26": {"target": 82.0, "actual": 79.8}, "Mar'26": {"target": 85.9, "actual": 79.5}}}, "25M": {"FY27": {"Apr'26": {"target": 56.0, "actual": 49.4}, "May'26": {"target": 56.3, "actual": 50.9}, "Jun'26": {"target": 56.5, "actual": 51.8}, "Jul'26": {"target": 56.8, "actual": 52.7}, "Aug'26": {"target": 57.1, "actual": 0}, "Sep'26": {"target": 57.4, "actual": 0}, "Oct'26": {"target": 57.6, "actual": 0}, "Nov'26": {"target": 57.9, "actual": 0}, "Dec'26": {"target": 58.2, "actual": 0}, "Jan'27": {"target": 58.5, "actual": 0}, "Feb'27": {"target": 58.7, "actual": 0}, "Mar'27": {"target": 59.0, "actual": 0}}, "FY26": {"Apr'25": {"target": 62.4, "actual": 54.5}, "May'25": {"target": 62.5, "actual": 54.9}, "Jun'25": {"target": 62.7, "actual": 54.9}, "Jul'25": {"target": 62.5, "actual": 55.7}, "Aug'25": {"target": 62.6, "actual": 56.7}, "Sep'25": {"target": 62.7, "actual": 57.5}, "Oct'25": {"target": 62.5, "actual": 57.6}, "Nov'25": {"target": 62.6, "actual": 58.0}, "Dec'25": {"target": 62.7, "actual": 55.6}, "Jan'26": {"target": 62.4, "actual": 55.3}, "Feb'26": {"target": 62.5, "actual": 54.8}, "Mar'26": {"target": 62.8, "actual": 53.6}}}, "37M": {"FY27": {"Apr'26": {"target": 49.0, "actual": 46.9}, "May'26": {"target": 49.0, "actual": 47.5}, "Jun'26": {"target": 49.1, "actual": 47.7}, "Jul'26": {"target": 49.1, "actual": 47.7}, "Aug'26": {"target": 49.2, "actual": 0}, "Sep'26": {"target": 49.2, "actual": 0}, "Oct'26": {"target": 49.3, "actual": 0}, "Nov'26": {"target": 49.3, "actual": 0}, "Dec'26": {"target": 49.4, "actual": 0}, "Jan'27": {"target": 49.4, "actual": 0}, "Feb'27": {"target": 49.5, "actual": 0}, "Mar'27": {"target": 49.5, "actual": 0}}, "FY26": {"Apr'25": {"target": 49.0, "actual": 51.6}, "May'25": {"target": 49.4, "actual": 51.4}, "Jun'25": {"target": 49.8, "actual": 52.2}, "Jul'25": {"target": 49.3, "actual": 52.0}, "Aug'25": {"target": 49.8, "actual": 51.9}, "Sep'25": {"target": 49.2, "actual": 51.9}, "Oct'25": {"target": 49.0, "actual": 51.2}, "Nov'25": {"target": 49.9, "actual": 51.7}, "Dec'25": {"target": 51.5, "actual": 50.4}, "Jan'26": {"target": 51.0, "actual": 48.8}, "Feb'26": {"target": 52.5, "actual": 49.9}, "Mar'26": {"target": 54.3, "actual": 46.1}}}, "49M": {"FY27": {"Apr'26": {"target": 50.0, "actual": 43.1}, "May'26": {"target": 38.5, "actual": 42.5}, "Jun'26": {"target": 39.1, "actual": 42.1}, "Jul'26": {"target": 39.6, "actual": 42.5}, "Aug'26": {"target": 40.2, "actual": 0}, "Sep'26": {"target": 40.7, "actual": 0}, "Oct'26": {"target": 41.3, "actual": 0}, "Nov'26": {"target": 41.8, "actual": 0}, "Dec'26": {"target": 42.4, "actual": 0}, "Jan'27": {"target": 42.9, "actual": 0}, "Feb'27": {"target": 43.5, "actual": 0}, "Mar'27": {"target": 44.0, "actual": 0}}, "FY26": {"Apr'25": {"target": 43.0, "actual": 47.2}, "May'25": {"target": 43.5, "actual": 49.0}, "Jun'25": {"target": 43.8, "actual": 49.7}, "Jul'25": {"target": 43.8, "actual": 49.7}, "Aug'25": {"target": 43.5, "actual": 50.6}, "Sep'25": {"target": 43.9, "actual": 50.7}, "Oct'25": {"target": 43.6, "actual": 50.4}, "Nov'25": {"target": 44.0, "actual": 50.2}, "Dec'25": {"target": 44.6, "actual": 49.7}, "Jan'26": {"target": 44.3, "actual": 49.0}, "Feb'26": {"target": 45.6, "actual": 49.4}, "Mar'26": {"target": 47.0, "actual": 43.2}}}, "61M": {"FY27": {"Apr'26": {"target": 32.0, "actual": 23.6}, "May'26": {"target": 32.0, "actual": 24.6}, "Jun'26": {"target": 32.0, "actual": 39.4}, "Jul'26": {"target": 32.0, "actual": 39.8}, "Aug'26": {"target": 32.0, "actual": 0}, "Sep'26": {"target": 32.0, "actual": 0}, "Oct'26": {"target": 32.0, "actual": 0}, "Nov'26": {"target": 32.0, "actual": 0}, "Dec'26": {"target": 32.0, "actual": 0}, "Jan'27": {"target": 32.0, "actual": 0}, "Feb'27": {"target": 32.0, "actual": 0}, "Mar'27": {"target": 32.0, "actual": 0}}, "FY26": {"Apr'25": {"target": 37.3, "actual": 27.7}, "May'25": {"target": 38.0, "actual": 26.6}, "Jun'25": {"target": 38.0, "actual": 26.4}, "Jul'25": {"target": 37.9, "actual": 26.0}, "Aug'25": {"target": 37.1, "actual": 25.8}, "Sep'25": {"target": 36.7, "actual": 25.8}, "Oct'25": {"target": 36.2, "actual": 25.1}, "Nov'25": {"target": 36.2, "actual": 24.2}, "Dec'25": {"target": 36.1, "actual": 23.1}, "Jan'26": {"target": 35.1, "actual": 24.4}, "Feb'26": {"target": 34.5, "actual": 26.6}, "Mar'26": {"target": 33.1, "actual": 24.3}}}}}, "PO": {"accrual": {"FY27": {"Apr'26": {"target": 0.49, "actual": -2.71}, "May'26": {"target": 3.72, "actual": 4.17}, "Jun'26": {"target": 6.22, "actual": 4.43}, "Jul'26": {"target": 2.36, "actual": 1.59}, "Aug'26": {"target": 4.01, "actual": 0}, "Sep'26": {"target": 7.99, "actual": 0}, "Oct'26": {"target": 1.69, "actual": 0}, "Nov'26": {"target": 5.88, "actual": 0}, "Dec'26": {"target": 7.83, "actual": 0}, "Jan'27": {"target": 4.73, "actual": 0}, "Feb'27": {"target": 7.21, "actual": 0}, "Mar'27": {"target": 17.59, "actual": 0}}, "FY26": {"Apr'25": {"target": -1.45, "actual": -0.95}, "May'25": {"target": 2.35, "actual": 2.01}, "Jun'25": {"target": 5.16, "actual": 5.16}, "Jul'25": {"target": 1.87, "actual": 1.88}, "Aug'25": {"target": 3.27, "actual": 3.17}, "Sep'25": {"target": 6.95, "actual": 5.99}, "Oct'25": {"target": 0.5, "actual": 2.01}, "Nov'25": {"target": 5.23, "actual": 4.29}, "Dec'25": {"target": 8.12, "actual": 4.72}, "Jan'26": {"target": 3.39, "actual": 4.13}, "Feb'26": {"target": 6.48, "actual": 4.81}, "Mar'26": {"target": 18.2, "actual": 12.99}}}, "cash": {"FY27": {"Apr'26": {"target": 6.43, "actual": 3.9}, "May'26": {"target": 1.91, "actual": 2.82}, "Jun'26": {"target": 4.98, "actual": 3.38}, "Jul'26": {"target": 4.2, "actual": 3.25}, "Aug'26": {"target": 3.53, "actual": 0}, "Sep'26": {"target": 2.4, "actual": 0}, "Oct'26": {"target": 6.24, "actual": 0}, "Nov'26": {"target": 3.41, "actual": 0}, "Dec'26": {"target": 4.73, "actual": 0}, "Jan'27": {"target": 8.71, "actual": 0}, "Feb'27": {"target": 6.11, "actual": 0}, "Mar'27": {"target": 13.53, "actual": 0}}, "FY26": {"Apr'25": {"target": 4.12, "actual": 3.52}, "May'25": {"target": 3.02, "actual": 2.14}, "Jun'25": {"target": 3.66, "actual": 3.27}, "Jul'25": {"target": 3.28, "actual": 3.5}, "Aug'25": {"target": 3.37, "actual": 2.43}, "Sep'25": {"target": 4.32, "actual": 4.55}, "Oct'25": {"target": 4.01, "actual": 4.26}, "Nov'25": {"target": 4.06, "actual": 2.77}, "Dec'25": {"target": 6.09, "actual": 1.92}, "Jan'26": {"target": 6.32, "actual": 6.76}, "Feb'26": {"target": 6.81, "actual": 4.85}, "Mar'26": {"target": 12.5, "actual": 8.21}}}, "persistency": {"13M": {"FY27": {"Apr'26": {"target": 70.0, "actual": 57.3}, "May'26": {"target": 70.0, "actual": 58.1}, "Jun'26": {"target": 70.0, "actual": 57.4}, "Jul'26": {"target": 70.0, "actual": 56.4}, "Aug'26": {"target": 70.0, "actual": 0}, "Sep'26": {"target": 70.0, "actual": 0}, "Oct'26": {"target": 70.0, "actual": 0}, "Nov'26": {"target": 70.0, "actual": 0}, "Dec'26": {"target": 70.0, "actual": 0}, "Jan'27": {"target": 70.0, "actual": 0}, "Feb'27": {"target": 70.0, "actual": 0}, "Mar'27": {"target": 70.0, "actual": 0}}, "FY26": {"Apr'25": {"target": 65.6, "actual": 66.0}, "May'25": {"target": 66.3, "actual": 67.4}, "Jun'25": {"target": 66.7, "actual": 67.7}, "Jul'25": {"target": 66.4, "actual": 68.1}, "Aug'25": {"target": 66.8, "actual": 67.5}, "Sep'25": {"target": 67.1, "actual": 68.2}, "Oct'25": {"target": 65.7, "actual": 68.9}, "Nov'25": {"target": 67.0, "actual": 67.6}, "Dec'25": {"target": 66.5, "actual": 59.1}, "Jan'26": {"target": 64.4, "actual": 59.4}, "Feb'26": {"target": 67.6, "actual": 59.6}, "Mar'26": {"target": 71.3, "actual": 58.9}}}, "25M": {"FY27": {"Apr'26": {"target": 51.0, "actual": 43.0}, "May'26": {"target": 51.1, "actual": 44.1}, "Jun'26": {"target": 51.2, "actual": 45.1}, "Jul'26": {"target": 51.3, "actual": 45.0}, "Aug'26": {"target": 51.4, "actual": 0}, "Sep'26": {"target": 51.5, "actual": 0}, "Oct'26": {"target": 51.5, "actual": 0}, "Nov'26": {"target": 51.6, "actual": 0}, "Dec'26": {"target": 51.7, "actual": 0}, "Jan'27": {"target": 51.8, "actual": 0}, "Feb'27": {"target": 51.9, "actual": 0}, "Mar'27": {"target": 52.0, "actual": 0}}, "FY26": {"Apr'25": {"target": 39.9, "actual": 46.6}, "May'25": {"target": 41.3, "actual": 45.8}, "Jun'25": {"target": 42.6, "actual": 46.1}, "Jul'25": {"target": 43.5, "actual": 46.0}, "Aug'25": {"target": 45.0, "actual": 46.2}, "Sep'25": {"target": 44.9, "actual": 46.1}, "Oct'25": {"target": 44.0, "actual": 46.9}, "Nov'25": {"target": 42.3, "actual": 47.6}, "Dec'25": {"target": 43.6, "actual": 44.8}, "Jan'26": {"target": 45.8, "actual": 43.9}, "Feb'26": {"target": 47.2, "actual": 45.0}, "Mar'26": {"target": 51.4, "actual": 44.7}}}, "37M": {"FY27": {"Apr'26": {"target": 39.0, "actual": 42.4}, "May'26": {"target": 39.3, "actual": 41.5}, "Jun'26": {"target": 39.5, "actual": 41.5}, "Jul'26": {"target": 39.8, "actual": 40.5}, "Aug'26": {"target": 40.1, "actual": 0}, "Sep'26": {"target": 40.4, "actual": 0}, "Oct'26": {"target": 40.6, "actual": 0}, "Nov'26": {"target": 40.9, "actual": 0}, "Dec'26": {"target": 41.2, "actual": 0}, "Jan'27": {"target": 41.5, "actual": 0}, "Feb'27": {"target": 41.7, "actual": 0}, "Mar'27": {"target": 42.0, "actual": 0}}, "FY26": {"Apr'25": {"target": 20.6, "actual": 32.7}, "May'25": {"target": 21.1, "actual": 34.1}, "Jun'25": {"target": 22.0, "actual": 36.6}, "Jul'25": {"target": 22.0, "actual": 38.2}, "Aug'25": {"target": 21.6, "actual": 38.9}, "Sep'25": {"target": 21.7, "actual": 40.2}, "Oct'25": {"target": 22.5, "actual": 38.8}, "Nov'25": {"target": 23.9, "actual": 37.3}, "Dec'25": {"target": 25.1, "actual": 37.4}, "Jan'26": {"target": 26.6, "actual": 41.0}, "Feb'26": {"target": 30.6, "actual": 43.2}, "Mar'26": {"target": 34.2, "actual": 43.6}}}, "49M": {"FY27": {"Apr'26": {"target": 21.0, "actual": 25.2}, "May'26": {"target": 21.0, "actual": 27.0}, "Jun'26": {"target": 21.1, "actual": 27.2}, "Jul'26": {"target": 21.1, "actual": 28.2}, "Aug'26": {"target": 21.2, "actual": 0}, "Sep'26": {"target": 21.2, "actual": 0}, "Oct'26": {"target": 21.3, "actual": 0}, "Nov'26": {"target": 21.3, "actual": 0}, "Dec'26": {"target": 21.4, "actual": 0}, "Jan'27": {"target": 21.4, "actual": 0}, "Feb'27": {"target": 21.5, "actual": 0}, "Mar'27": {"target": 21.5, "actual": 0}}, "FY26": {"Apr'25": {"target": 27.4, "actual": 18.1}, "May'25": {"target": 24.9, "actual": 18.5}, "Jun'25": {"target": 24.8, "actual": 20.0}, "Jul'25": {"target": 24.8, "actual": 19.3}, "Aug'25": {"target": 26.1, "actual": 19.3}, "Sep'25": {"target": 26.1, "actual": 19.6}, "Oct'25": {"target": 27.2, "actual": 20.1}, "Nov'25": {"target": 26.3, "actual": 21.1}, "Dec'25": {"target": 24.8, "actual": 21.8}, "Jan'26": {"target": 22.8, "actual": 22.9}, "Feb'26": {"target": 21.5, "actual": 25.2}, "Mar'26": {"target": 24.3, "actual": 25.2}}}, "61M": {"FY27": {"Apr'26": {"target": 37.0, "actual": 14.7}, "May'26": {"target": 37.1, "actual": 15.0}, "Jun'26": {"target": 37.2, "actual": 14.5}, "Jul'26": {"target": 37.3, "actual": 14.2}, "Aug'26": {"target": 37.4, "actual": 0}, "Sep'26": {"target": 37.5, "actual": 0}, "Oct'26": {"target": 37.5, "actual": 0}, "Nov'26": {"target": 37.6, "actual": 0}, "Dec'26": {"target": 37.7, "actual": 0}, "Jan'27": {"target": 37.8, "actual": 0}, "Feb'27": {"target": 37.9, "actual": 0}, "Mar'27": {"target": 38.0, "actual": 0}}, "FY26": {"Apr'25": {"target": 11.0, "actual": 23.4}, "May'25": {"target": 11.3, "actual": 22.3}, "Jun'25": {"target": 11.5, "actual": 22.4}, "Jul'25": {"target": 12.0, "actual": 23.3}, "Aug'25": {"target": 13.0, "actual": 23.8}, "Sep'25": {"target": 14.0, "actual": 23.8}, "Oct'25": {"target": 15.0, "actual": 25.0}, "Nov'25": {"target": 16.0, "actual": 23.9}, "Dec'25": {"target": 17.0, "actual": 22.2}, "Jan'26": {"target": 18.0, "actual": 19.3}, "Feb'26": {"target": 19.0, "actual": 17.6}, "Mar'26": {"target": 25.0, "actual": 15.5}}}}}, "IM": {"accrual": {"FY27": {"Apr'26": {"target": 1.27, "actual": -2.0}, "May'26": {"target": 4.56, "actual": 3.05}, "Jun'26": {"target": 4.91, "actual": 2.29}, "Jul'26": {"target": 3.93, "actual": 1.43}, "Aug'26": {"target": 4.19, "actual": 0}, "Sep'26": {"target": 5.2, "actual": 0}, "Oct'26": {"target": 4.22, "actual": 0}, "Nov'26": {"target": 7.83, "actual": 0}, "Dec'26": {"target": 5.29, "actual": 0}, "Jan'27": {"target": 3.16, "actual": 0}, "Feb'27": {"target": 4.67, "actual": 0}, "Mar'27": {"target": 15.67, "actual": 0}}, "FY26": {"Apr'25": {"target": -0.35, "actual": -0.2}, "May'25": {"target": 1.84, "actual": 1.93}, "Jun'25": {"target": 2.41, "actual": 2.15}, "Jul'25": {"target": 1.57, "actual": 0.97}, "Aug'25": {"target": 1.49, "actual": 1.32}, "Sep'25": {"target": 1.96, "actual": 2.07}, "Oct'25": {"target": 1.93, "actual": 1.68}, "Nov'25": {"target": 2.77, "actual": 1.91}, "Dec'25": {"target": 3.22, "actual": 2.74}, "Jan'26": {"target": 1.5, "actual": 1.08}, "Feb'26": {"target": 2.99, "actual": 2.14}, "Mar'26": {"target": 11.6, "actual": 11.71}}}, "cash": {"FY27": {"Apr'26": {"target": 5.5, "actual": 2.06}, "May'26": {"target": 3.63, "actual": 1.29}, "Jun'26": {"target": 5.85, "actual": 3.78}, "Jul'26": {"target": 4.11, "actual": 1.44}, "Aug'26": {"target": 4.46, "actual": 0}, "Sep'26": {"target": 2.4, "actual": 0}, "Oct'26": {"target": 5.87, "actual": 0}, "Nov'26": {"target": 4.18, "actual": 0}, "Dec'26": {"target": 5.26, "actual": 0}, "Jan'27": {"target": 3.96, "actual": 0}, "Feb'27": {"target": 4.97, "actual": 0}, "Mar'27": {"target": 11.36, "actual": 0}}, "FY26": {"Apr'25": {"target": 2.88, "actual": 1.74}, "May'25": {"target": 1.71, "actual": 1.38}, "Jun'25": {"target": 2.33, "actual": 2.36}, "Jul'25": {"target": 1.95, "actual": 1.26}, "Aug'25": {"target": 1.35, "actual": 1.41}, "Sep'25": {"target": 1.54, "actual": 1.21}, "Oct'25": {"target": 2.43, "actual": 2.14}, "Nov'25": {"target": 2.36, "actual": 1.52}, "Dec'25": {"target": 3.14, "actual": 1.38}, "Jan'26": {"target": 2.26, "actual": 1.94}, "Feb'26": {"target": 2.86, "actual": 2.46}, "Mar'26": {"target": 8.93, "actual": 8.52}}}, "persistency": {"13M": {"FY27": {"Apr'26": {"target": 67.0, "actual": 53.8}, "May'26": {"target": 67.2, "actual": 53.6}, "Jun'26": {"target": 67.4, "actual": 58.9}, "Jul'26": {"target": 67.5, "actual": 59.2}, "Aug'26": {"target": 67.7, "actual": 0}, "Sep'26": {"target": 67.9, "actual": 0}, "Oct'26": {"target": 68.1, "actual": 0}, "Nov'26": {"target": 68.3, "actual": 0}, "Dec'26": {"target": 68.5, "actual": 0}, "Jan'27": {"target": 68.6, "actual": 0}, "Feb'27": {"target": 68.8, "actual": 0}, "Mar'27": {"target": 69.0, "actual": 0}}, "FY26": {"Apr'25": {"target": 57.2, "actual": 60.4}, "May'25": {"target": 58.6, "actual": 62.0}, "Jun'25": {"target": 57.8, "actual": 63.2}, "Jul'25": {"target": 58.7, "actual": 62.3}, "Aug'25": {"target": 58.7, "actual": 63.2}, "Sep'25": {"target": 59.0, "actual": 63.5}, "Oct'25": {"target": 57.8, "actual": 61.4}, "Nov'25": {"target": 59.9, "actual": 61.0}, "Dec'25": {"target": 61.9, "actual": 53.7}, "Jan'26": {"target": 63.1, "actual": 52.3}, "Feb'26": {"target": 65.3, "actual": 55.7}, "Mar'26": {"target": 69.7, "actual": 53.4}}}, "25M": {"FY27": {"Apr'26": {"target": 45.0, "actual": 39.2}, "May'26": {"target": 45.3, "actual": 39.0}, "Jun'26": {"target": 45.5, "actual": 38.5}, "Jul'26": {"target": 45.8, "actual": 37.0}, "Aug'26": {"target": 46.1, "actual": 0}, "Sep'26": {"target": 46.4, "actual": 0}, "Oct'26": {"target": 46.6, "actual": 0}, "Nov'26": {"target": 46.9, "actual": 0}, "Dec'26": {"target": 47.2, "actual": 0}, "Jan'27": {"target": 47.5, "actual": 0}, "Feb'27": {"target": 47.7, "actual": 0}, "Mar'27": {"target": 48.0, "actual": 0}}, "FY26": {"Apr'25": {"target": 51.3, "actual": 39.2}, "May'25": {"target": 51.4, "actual": 39.9}, "Jun'25": {"target": 51.7, "actual": 39.9}, "Jul'25": {"target": 51.2, "actual": 39.6}, "Aug'25": {"target": 51.4, "actual": 40.1}, "Sep'25": {"target": 51.5, "actual": 39.3}, "Oct'25": {"target": 51.3, "actual": 38.6}, "Nov'25": {"target": 51.4, "actual": 37.2}, "Dec'25": {"target": 51.5, "actual": 38.9}, "Jan'26": {"target": 51.1, "actual": 40.4}, "Feb'26": {"target": 51.2, "actual": 40.4}, "Mar'26": {"target": 51.3, "actual": 40.7}}}, "37M": {"FY27": {"Apr'26": {"target": 30.0, "actual": 30.6}, "May'26": {"target": 30.0, "actual": 30.8}, "Jun'26": {"target": 30.0, "actual": 31.4}, "Jul'26": {"target": 30.0, "actual": 31.3}, "Aug'26": {"target": 30.0, "actual": 0}, "Sep'26": {"target": 30.0, "actual": 0}, "Oct'26": {"target": 30.0, "actual": 0}, "Nov'26": {"target": 30.0, "actual": 0}, "Dec'26": {"target": 30.0, "actual": 0}, "Jan'27": {"target": 30.0, "actual": 0}, "Feb'27": {"target": 30.0, "actual": 0}, "Mar'27": {"target": 30.0, "actual": 0}}, "FY26": {"Apr'25": {"target": 21.1, "actual": 28.9}, "May'25": {"target": 21.1, "actual": 29.8}, "Jun'25": {"target": 21.9, "actual": 31.0}, "Jul'25": {"target": 22.4, "actual": 31.5}, "Aug'25": {"target": 24.5, "actual": 30.2}, "Sep'25": {"target": 24.1, "actual": 31.3}, "Oct'25": {"target": 24.2, "actual": 32.4}, "Nov'25": {"target": 25.7, "actual": 31.8}, "Dec'25": {"target": 24.8, "actual": 30.8}, "Jan'26": {"target": 25.9, "actual": 29.9}, "Feb'26": {"target": 28.0, "actual": 30.8}, "Mar'26": {"target": 28.6, "actual": 29.1}}}, "49M": {"FY27": {"Apr'26": {"target": 30.0, "actual": 24.6}, "May'26": {"target": 30.0, "actual": 25.3}, "Jun'26": {"target": 30.0, "actual": 24.4}, "Jul'26": {"target": 30.0, "actual": 24.1}, "Aug'26": {"target": 30.0, "actual": 0}, "Sep'26": {"target": 30.0, "actual": 0}, "Oct'26": {"target": 30.0, "actual": 0}, "Nov'26": {"target": 30.0, "actual": 0}, "Dec'26": {"target": 30.0, "actual": 0}, "Jan'27": {"target": 30.0, "actual": 0}, "Feb'27": {"target": 30.0, "actual": 0}, "Mar'27": {"target": 30.0, "actual": 0}}, "FY26": {"Apr'25": {"target": 20.0, "actual": 26.7}, "May'25": {"target": 24.2, "actual": 25.4}, "Jun'25": {"target": 25.2, "actual": 27.6}, "Jul'25": {"target": 25.2, "actual": 27.5}, "Aug'25": {"target": 22.0, "actual": 29.0}, "Sep'25": {"target": 21.0, "actual": 28.1}, "Oct'25": {"target": 20.0, "actual": 27.5}, "Nov'25": {"target": 19.4, "actual": 29.0}, "Dec'25": {"target": 17.8, "actual": 27.3}, "Jan'26": {"target": 24.2, "actual": 28.2}, "Feb'26": {"target": 23.9, "actual": 29.0}, "Mar'26": {"target": 27.3, "actual": 25.6}}}, "61M": {"FY27": {"Apr'26": {"target": 20.0, "actual": 19.4}, "May'26": {"target": 20.1, "actual": 20.7}, "Jun'26": {"target": 20.2, "actual": 21.0}, "Jul'26": {"target": 20.3, "actual": 21.0}, "Aug'26": {"target": 20.4, "actual": 0}, "Sep'26": {"target": 20.5, "actual": 0}, "Oct'26": {"target": 20.5, "actual": 0}, "Nov'26": {"target": 20.6, "actual": 0}, "Dec'26": {"target": 20.7, "actual": 0}, "Jan'27": {"target": 20.8, "actual": 0}, "Feb'27": {"target": 20.9, "actual": 0}, "Mar'27": {"target": 21.0, "actual": 0}}, "FY26": {"Apr'25": {"target": 0, "actual": 0}, "May'25": {"target": 0, "actual": 0}, "Jun'25": {"target": 0, "actual": 0}, "Jul'25": {"target": 0, "actual": 0}, "Aug'25": {"target": 22.9, "actual": 0}, "Sep'25": {"target": 22.9, "actual": 11.6}, "Oct'25": {"target": 22.9, "actual": 16.6}, "Nov'25": {"target": 22.9, "actual": 26.5}, "Dec'25": {"target": 22.9, "actual": 20.2}, "Jan'26": {"target": 22.9, "actual": 24.6}, "Feb'26": {"target": 22.9, "actual": 22.0}, "Mar'26": {"target": 22.9, "actual": 18.8}}}}}, "Yodhha": {"accrual": {"FY27": {"Apr'26": {"target": null, "actual": 1.33}, "May'26": {"target": null, "actual": 1.34}, "Jun'26": {"target": null, "actual": 1.4}, "Jul'26": {"target": null, "actual": 1.32}, "Aug'26": {"target": null, "actual": 0}, "Sep'26": {"target": null, "actual": 0}, "Oct'26": {"target": null, "actual": 0}, "Nov'26": {"target": null, "actual": 0}, "Dec'26": {"target": null, "actual": 0}, "Jan'27": {"target": null, "actual": 0}, "Feb'27": {"target": null, "actual": 0}, "Mar'27": {"target": null, "actual": 0}}, "FY26": {"Apr'25": {"target": 1.18, "actual": 1.45}, "May'25": {"target": 1.47, "actual": 1.51}, "Jun'25": {"target": 1.64, "actual": 1.65}, "Jul'25": {"target": 1.47, "actual": 1.47}, "Aug'25": {"target": 1.48, "actual": 1.5}, "Sep'25": {"target": 1.66, "actual": 1.83}, "Oct'25": {"target": 1.45, "actual": 1.28}, "Nov'25": {"target": 1.42, "actual": 1.43}, "Dec'25": {"target": 1.56, "actual": 1.56}, "Jan'26": {"target": 1.39, "actual": 1.43}, "Feb'26": {"target": 1.4, "actual": 1.52}, "Mar'26": {"target": 1.2, "actual": 1.78}}}, "cash": {"FY27": {"Apr'26": {"target": null, "actual": 1.37}, "May'26": {"target": null, "actual": 1.37}, "Jun'26": {"target": null, "actual": 1.4}, "Jul'26": {"target": null, "actual": 1.34}, "Aug'26": {"target": null, "actual": 0}, "Sep'26": {"target": null, "actual": 0}, "Oct'26": {"target": null, "actual": 0}, "Nov'26": {"target": null, "actual": 0}, "Dec'26": {"target": null, "actual": 0}, "Jan'27": {"target": null, "actual": 0}, "Feb'27": {"target": null, "actual": 0}, "Mar'27": {"target": null, "actual": 0}}, "FY26": {"Apr'25": {"target": 1.56, "actual": 1.54}, "May'25": {"target": 1.46, "actual": 1.54}, "Jun'25": {"target": 1.49, "actual": 1.66}, "Jul'25": {"target": 1.46, "actual": 1.49}, "Aug'25": {"target": 1.44, "actual": 1.48}, "Sep'25": {"target": 1.58, "actual": 1.67}, "Oct'25": {"target": 1.44, "actual": 1.45}, "Nov'25": {"target": 1.4, "actual": 1.44}, "Dec'25": {"target": 1.45, "actual": 1.5}, "Jan'26": {"target": 1.42, "actual": 1.47}, "Feb'26": {"target": 1.44, "actual": 1.5}, "Mar'26": {"target": 1.7, "actual": 1.72}}}, "persistency": {"13M": {"FY27": null, "FY26": null}, "25M": {"FY27": {"Apr'26": {"target": 37.0, "actual": 37.0}, "May'26": {"target": 0, "actual": 45.8}, "Jun'26": {"target": 0, "actual": 0}, "Jul'26": {"target": 0, "actual": 0}, "Aug'26": {"target": 0, "actual": 0}, "Sep'26": {"target": 0, "actual": 0}, "Oct'26": {"target": 0, "actual": 0}, "Nov'26": {"target": 0, "actual": 0}, "Dec'26": {"target": 0, "actual": 0}, "Jan'27": {"target": 0, "actual": 0}, "Feb'27": {"target": 0, "actual": 0}, "Mar'27": {"target": 0, "actual": 0}}, "FY26": {"Apr'25": {"target": 49.8, "actual": 41.5}, "May'25": {"target": 50.0, "actual": 41.3}, "Jun'25": {"target": 50.2, "actual": 42.2}, "Jul'25": {"target": 49.0, "actual": 42.4}, "Aug'25": {"target": 49.5, "actual": 40.6}, "Sep'25": {"target": 49.6, "actual": 39.7}, "Oct'25": {"target": 49.3, "actual": 36.2}, "Nov'25": {"target": 49.3, "actual": 37.0}, "Dec'25": {"target": 49.5, "actual": 35.5}, "Jan'26": {"target": 48.0, "actual": 37.7}, "Feb'26": {"target": 48.1, "actual": 40.1}, "Mar'26": {"target": 48.2, "actual": 43.6}}}, "37M": {"FY27": {"Apr'26": {"target": 39.0, "actual": 38.5}, "May'26": {"target": 39.1, "actual": 37.7}, "Jun'26": {"target": 39.2, "actual": 38.2}, "Jul'26": {"target": 39.3, "actual": 38.5}, "Aug'26": {"target": 39.4, "actual": 0}, "Sep'26": {"target": 39.5, "actual": 0}, "Oct'26": {"target": 39.5, "actual": 0}, "Nov'26": {"target": 39.6, "actual": 0}, "Dec'26": {"target": 39.7, "actual": 0}, "Jan'27": {"target": 39.8, "actual": 0}, "Feb'27": {"target": 39.9, "actual": 0}, "Mar'27": {"target": 40.0, "actual": 0}}, "FY26": {"Apr'25": {"target": 32.3, "actual": 33.7}, "May'25": {"target": 32.9, "actual": 33.9}, "Jun'25": {"target": 32.7, "actual": 34.0}, "Jul'25": {"target": 33.0, "actual": 34.0}, "Aug'25": {"target": 33.4, "actual": 34.1}, "Sep'25": {"target": 32.9, "actual": 35.3}, "Oct'25": {"target": 33.9, "actual": 34.9}, "Nov'25": {"target": 34.7, "actual": 34.1}, "Dec'25": {"target": 34.4, "actual": 34.2}, "Jan'26": {"target": 34.2, "actual": 33.3}, "Feb'26": {"target": 34.5, "actual": 35.2}, "Mar'26": {"target": 33.9, "actual": 33.7}}}, "49M": {"FY27": {"Apr'26": {"target": 33.0, "actual": 29.8}, "May'26": {"target": 33.0, "actual": 30.2}, "Jun'26": {"target": 33.0, "actual": 30.2}, "Jul'26": {"target": 33.0, "actual": 30.3}, "Aug'26": {"target": 33.0, "actual": 0}, "Sep'26": {"target": 33.0, "actual": 0}, "Oct'26": {"target": 33.0, "actual": 0}, "Nov'26": {"target": 33.0, "actual": 0}, "Dec'26": {"target": 33.0, "actual": 0}, "Jan'27": {"target": 33.0, "actual": 0}, "Feb'27": {"target": 33.0, "actual": 0}, "Mar'27": {"target": 33.0, "actual": 0}}, "FY26": {"Apr'25": {"target": 28.0, "actual": 29.8}, "May'25": {"target": 29.0, "actual": 30.1}, "Jun'25": {"target": 29.5, "actual": 30.2}, "Jul'25": {"target": 29.5, "actual": 30.7}, "Aug'25": {"target": 29.7, "actual": 31.4}, "Sep'25": {"target": 30.0, "actual": 31.4}, "Oct'25": {"target": 29.8, "actual": 32.3}, "Nov'25": {"target": 30.5, "actual": 32.8}, "Dec'25": {"target": 31.0, "actual": 32.2}, "Jan'26": {"target": 31.6, "actual": 31.7}, "Feb'26": {"target": 31.9, "actual": 30.9}, "Mar'26": {"target": 32.6, "actual": 29.9}}}, "61M": {"FY27": {"Apr'26": {"target": 30.0, "actual": 25.2}, "May'26": {"target": 30.0, "actual": 25.4}, "Jun'26": {"target": 30.0, "actual": 27.0}, "Jul'26": {"target": 30.0, "actual": 27.3}, "Aug'26": {"target": 30.0, "actual": 0}, "Sep'26": {"target": 30.0, "actual": 0}, "Oct'26": {"target": 30.0, "actual": 0}, "Nov'26": {"target": 30.0, "actual": 0}, "Dec'26": {"target": 30.0, "actual": 0}, "Jan'27": {"target": 30.0, "actual": 0}, "Feb'27": {"target": 30.0, "actual": 0}, "Mar'27": {"target": 30.0, "actual": 0}}, "FY26": {"Apr'25": {"target": 29.7, "actual": 41.5}, "May'25": {"target": 29.5, "actual": 40.7}, "Jun'25": {"target": 30.5, "actual": 39.9}, "Jul'25": {"target": 31.2, "actual": 38.0}, "Aug'25": {"target": 31.3, "actual": 36.8}, "Sep'25": {"target": 32.1, "actual": 35.3}, "Oct'25": {"target": 31.3, "actual": 33.9}, "Nov'25": {"target": 31.3, "actual": 32.1}, "Dec'25": {"target": 30.8, "actual": 31.3}, "Jan'26": {"target": 30.7, "actual": 30.4}, "Feb'26": {"target": 31.1, "actual": 29.0}, "Mar'26": {"target": 31.1, "actual": 24.4}}}}}, "CAB": {"accrual": {"FY27": {"Apr'26": {"target": 21.15, "actual": 17.8}, "May'26": {"target": 40.78, "actual": 34.41}, "Jun'26": {"target": 42.76, "actual": 36.39}, "Jul'26": {"target": 45.09, "actual": 37.99}, "Aug'26": {"target": 39.17, "actual": 0}, "Sep'26": {"target": 47.43, "actual": 0}, "Oct'26": {"target": 43.96, "actual": 0}, "Nov'26": {"target": 39.17, "actual": 0}, "Dec'26": {"target": 37.21, "actual": 0}, "Jan'27": {"target": 46.37, "actual": 0}, "Feb'27": {"target": 39.17, "actual": 0}, "Mar'27": {"target": 130.24, "actual": 0}}, "FY26": {"Apr'25": {"target": 22.47, "actual": 21.72}, "May'25": {"target": 45.61, "actual": 43.06}, "Jun'25": {"target": 49.51, "actual": 46.37}, "Jul'25": {"target": 53.56, "actual": 44.62}, "Aug'25": {"target": 50.95, "actual": 44.93}, "Sep'25": {"target": 53.24, "actual": 49.24}, "Oct'25": {"target": 51.12, "actual": 44.69}, "Nov'25": {"target": 49.0, "actual": 44.94}, "Dec'25": {"target": 56.22, "actual": 35.22}, "Jan'26": {"target": 53.6, "actual": 47.07}, "Feb'26": {"target": 53.94, "actual": 49.47}, "Mar'26": {"target": 103.1, "actual": 98.61}}}, "cash": {"FY27": {"Apr'26": {"target": 49.63, "actual": 44.18}, "May'26": {"target": 39.78, "actual": 35.74}, "Jun'26": {"target": 43.09, "actual": 34.67}, "Jul'26": {"target": 42.68, "actual": 37.33}, "Aug'26": {"target": 37.09, "actual": 0}, "Sep'26": {"target": 46.4, "actual": 0}, "Oct'26": {"target": 46.3, "actual": 0}, "Nov'26": {"target": 37.5, "actual": 0}, "Dec'26": {"target": 35.38, "actual": 0}, "Jan'27": {"target": 48.13, "actual": 0}, "Feb'27": {"target": 39.11, "actual": 0}, "Mar'27": {"target": 96.74, "actual": 0}}, "FY26": {"Apr'25": {"target": 52.45, "actual": 49.38}, "May'25": {"target": 43.39, "actual": 40.96}, "Jun'25": {"target": 47.37, "actual": 45.46}, "Jul'25": {"target": 50.74, "actual": 42.66}, "Aug'25": {"target": 48.61, "actual": 44.18}, "Sep'25": {"target": 52.05, "actual": 50.5}, "Oct'25": {"target": 54.69, "actual": 45.53}, "Nov'25": {"target": 47.86, "actual": 43.27}, "Dec'25": {"target": 54.85, "actual": 34.77}, "Jan'26": {"target": 55.86, "actual": 49.51}, "Feb'26": {"target": 55.01, "actual": 48.61}, "Mar'26": {"target": 97.29, "actual": 80.18}}}, "persistency": {"13M": {"FY27": {"Apr'26": {"target": 55.0, "actual": 47.8}, "May'26": {"target": 56.4, "actual": 47.6}, "Jun'26": {"target": 57.7, "actual": 48.0}, "Jul'26": {"target": 59.1, "actual": 49.2}, "Aug'26": {"target": 60.5, "actual": 0}, "Sep'26": {"target": 61.8, "actual": 0}, "Oct'26": {"target": 63.2, "actual": 0}, "Nov'26": {"target": 64.5, "actual": 0}, "Dec'26": {"target": 65.9, "actual": 0}, "Jan'27": {"target": 67.3, "actual": 0}, "Feb'27": {"target": 68.6, "actual": 0}, "Mar'27": {"target": 70.0, "actual": 0}}, "FY26": {"Apr'25": {"target": 74.9, "actual": 68.6}, "May'25": {"target": 75.4, "actual": 68.1}, "Jun'25": {"target": 75.9, "actual": 67.5}, "Jul'25": {"target": 76.0, "actual": 66.4}, "Aug'25": {"target": 75.4, "actual": 65.6}, "Sep'25": {"target": 74.7, "actual": 64.2}, "Oct'25": {"target": 73.8, "actual": 63.2}, "Nov'25": {"target": 73.5, "actual": 61.5}, "Dec'25": {"target": 73.4, "actual": 52.1}, "Jan'26": {"target": 72.6, "actual": 51.1}, "Feb'26": {"target": 74.6, "actual": 50.5}, "Mar'26": {"target": 77.8, "actual": 49.4}}}, "25M": {"FY27": {"Apr'26": {"target": 46.0, "actual": 34.4}, "May'26": {"target": 46.0, "actual": 33.8}, "Jun'26": {"target": 46.0, "actual": 33.1}, "Jul'26": {"target": 46.0, "actual": 32.0}, "Aug'26": {"target": 46.0, "actual": 0}, "Sep'26": {"target": 46.0, "actual": 0}, "Oct'26": {"target": 46.0, "actual": 0}, "Nov'26": {"target": 46.0, "actual": 0}, "Dec'26": {"target": 46.0, "actual": 0}, "Jan'27": {"target": 46.0, "actual": 0}, "Feb'27": {"target": 46.0, "actual": 0}, "Mar'27": {"target": 46.0, "actual": 0}}, "FY26": {"Apr'25": {"target": 57.2, "actual": 54.3}, "May'25": {"target": 57.3, "actual": 53.8}, "Jun'25": {"target": 57.5, "actual": 53.9}, "Jul'25": {"target": 57.2, "actual": 53.4}, "Aug'25": {"target": 57.5, "actual": 52.9}, "Sep'25": {"target": 57.6, "actual": 51.7}, "Oct'25": {"target": 57.4, "actual": 50.0}, "Nov'25": {"target": 58.0, "actual": 48.8}, "Dec'25": {"target": 58.4, "actual": 46.0}, "Jan'26": {"target": 58.5, "actual": 44.4}, "Feb'26": {"target": 59.5, "actual": 43.2}, "Mar'26": {"target": 60.8, "actual": 41.3}}}, "37M": {"FY27": {"Apr'26": {"target": 51.0, "actual": 48.8}, "May'26": {"target": 51.1, "actual": 48.2}, "Jun'26": {"target": 51.2, "actual": 47.9}, "Jul'26": {"target": 51.3, "actual": 47.1}, "Aug'26": {"target": 51.4, "actual": 0}, "Sep'26": {"target": 51.5, "actual": 0}, "Oct'26": {"target": 51.5, "actual": 0}, "Nov'26": {"target": 51.6, "actual": 0}, "Dec'26": {"target": 51.7, "actual": 0}, "Jan'27": {"target": 51.8, "actual": 0}, "Feb'27": {"target": 51.9, "actual": 0}, "Mar'27": {"target": 52.0, "actual": 0}}, "FY26": {"Apr'25": {"target": 49.4, "actual": 48.4}, "May'25": {"target": 50.0, "actual": 48.9}, "Jun'25": {"target": 50.2, "actual": 49.0}, "Jul'25": {"target": 49.8, "actual": 49.2}, "Aug'25": {"target": 51.0, "actual": 49.3}, "Sep'25": {"target": 51.5, "actual": 50.2}, "Oct'25": {"target": 51.0, "actual": 50.9}, "Nov'25": {"target": 51.7, "actual": 51.4}, "Dec'25": {"target": 52.5, "actual": 50.4}, "Jan'26": {"target": 52.3, "actual": 50.5}, "Feb'26": {"target": 52.7, "actual": 51.2}, "Mar'26": {"target": 52.9, "actual": 49.1}}}, "49M": {"FY27": {"Apr'26": {"target": 47.0, "actual": 42.9}, "May'26": {"target": 47.0, "actual": 43.4}, "Jun'26": {"target": 47.1, "actual": 42.9}, "Jul'26": {"target": 47.1, "actual": 42.5}, "Aug'26": {"target": 47.2, "actual": 0}, "Sep'26": {"target": 47.2, "actual": 0}, "Oct'26": {"target": 47.3, "actual": 0}, "Nov'26": {"target": 47.3, "actual": 0}, "Dec'26": {"target": 47.4, "actual": 0}, "Jan'27": {"target": 47.4, "actual": 0}, "Feb'27": {"target": 47.5, "actual": 0}, "Mar'27": {"target": 47.5, "actual": 0}}, "FY26": {"Apr'25": {"target": 40.2, "actual": 43.6}, "May'25": {"target": 40.3, "actual": 44.2}, "Jun'25": {"target": 40.6, "actual": 44.3}, "Jul'25": {"target": 40.6, "actual": 44.6}, "Aug'25": {"target": 41.2, "actual": 46.1}, "Sep'25": {"target": 41.4, "actual": 47.1}, "Oct'25": {"target": 41.0, "actual": 47.8}, "Nov'25": {"target": 41.3, "actual": 47.9}, "Dec'25": {"target": 41.6, "actual": 48.1}, "Jan'26": {"target": 41.3, "actual": 47.3}, "Feb'26": {"target": 41.4, "actual": 47.3}, "Mar'26": {"target": 41.7, "actual": 42.7}}}, "61M": {"FY27": {"Apr'26": {"target": 35.0, "actual": 32.1}, "May'26": {"target": 35.0, "actual": 32.4}, "Jun'26": {"target": 35.1, "actual": 33.9}, "Jul'26": {"target": 35.1, "actual": 34.6}, "Aug'26": {"target": 35.2, "actual": 0}, "Sep'26": {"target": 35.2, "actual": 0}, "Oct'26": {"target": 35.3, "actual": 0}, "Nov'26": {"target": 35.3, "actual": 0}, "Dec'26": {"target": 35.4, "actual": 0}, "Jan'27": {"target": 35.4, "actual": 0}, "Feb'27": {"target": 35.5, "actual": 0}, "Mar'27": {"target": 35.5, "actual": 0}}, "FY26": {"Apr'25": {"target": 35.6, "actual": 32.0}, "May'25": {"target": 35.3, "actual": 32.0}, "Jun'25": {"target": 35.2, "actual": 32.6}, "Jul'25": {"target": 34.1, "actual": 32.0}, "Aug'25": {"target": 33.0, "actual": 31.5}, "Sep'25": {"target": 32.1, "actual": 30.9}, "Oct'25": {"target": 31.4, "actual": 30.1}, "Nov'25": {"target": 31.9, "actual": 29.8}, "Dec'25": {"target": 32.5, "actual": 29.7}, "Jan'26": {"target": 34.5, "actual": 30.1}, "Feb'26": {"target": 35.0, "actual": 31.1}, "Mar'26": {"target": 36.0, "actual": 29.2}}}}}, "Banca": {"accrual": {"FY27": {"Apr'26": {"target": 2.45, "actual": 4.52}, "May'26": {"target": 13.17, "actual": 14.64}, "Jun'26": {"target": 17.39, "actual": 18.91}, "Jul'26": {"target": 18.39, "actual": 18.26}, "Aug'26": {"target": 17.61, "actual": 0}, "Sep'26": {"target": 22.84, "actual": 0}, "Oct'26": {"target": 12.11, "actual": 0}, "Nov'26": {"target": 14.98, "actual": 0}, "Dec'26": {"target": 23.55, "actual": 0}, "Jan'27": {"target": 19.82, "actual": 0}, "Feb'27": {"target": 26.2, "actual": 0}, "Mar'27": {"target": 34.76, "actual": 0}}, "FY26": {"Apr'25": {"target": 2.97, "actual": 2.07}, "May'25": {"target": 12.14, "actual": 11.54}, "Jun'25": {"target": 17.14, "actual": 15.13}, "Jul'25": {"target": 16.71, "actual": 16.27}, "Aug'25": {"target": 16.25, "actual": 15.31}, "Sep'25": {"target": 19.66, "actual": 21.02}, "Oct'25": {"target": 12.17, "actual": 9.73}, "Nov'25": {"target": 13.6, "actual": 13.18}, "Dec'25": {"target": 21.85, "actual": 19.97}, "Jan'26": {"target": 17.71, "actual": 17.75}, "Feb'26": {"target": 23.24, "actual": 21.75}, "Mar'26": {"target": 34.3, "actual": 30.84}}}, "cash": {"FY27": {"Apr'26": {"target": 12.45, "actual": 15.26}, "May'26": {"target": 11.98, "actual": 13.9}, "Jun'26": {"target": 15.06, "actual": 16.2}, "Jul'26": {"target": 18.98, "actual": 19.32}, "Aug'26": {"target": 17.94, "actual": 0}, "Sep'26": {"target": 21.0, "actual": 0}, "Oct'26": {"target": 15.4, "actual": 0}, "Nov'26": {"target": 13.55, "actual": 0}, "Dec'26": {"target": 20.8, "actual": 0}, "Jan'27": {"target": 20.08, "actual": 0}, "Feb'27": {"target": 26.56, "actual": 0}, "Mar'27": {"target": 31.66, "actual": 0}}, "FY26": {"Apr'25": {"target": 12.7, "actual": 10.86}, "May'25": {"target": 11.92, "actual": 10.68}, "Jun'25": {"target": 13.85, "actual": 13.1}, "Jul'25": {"target": 17.34, "actual": 16.13}, "Aug'25": {"target": 16.23, "actual": 15.3}, "Sep'25": {"target": 17.91, "actual": 17.44}, "Oct'25": {"target": 15.4, "actual": 13.91}, "Nov'25": {"target": 14.87, "actual": 12.64}, "Dec'25": {"target": 18.64, "actual": 17.67}, "Jan'26": {"target": 20.74, "actual": 17.24}, "Feb'26": {"target": 21.76, "actual": 19.61}, "Mar'26": {"target": 31.91, "actual": 27.21}}}, "persistency": {"13M": {"FY27": {"Apr'26": {"target": 82.0, "actual": 80.1}, "May'26": {"target": 82.1, "actual": 80.7}, "Jun'26": {"target": 82.2, "actual": 81.3}, "Jul'26": {"target": 82.3, "actual": 82.6}, "Aug'26": {"target": 82.4, "actual": 0}, "Sep'26": {"target": 82.5, "actual": 0}, "Oct'26": {"target": 82.5, "actual": 0}, "Nov'26": {"target": 82.6, "actual": 0}, "Dec'26": {"target": 82.7, "actual": 0}, "Jan'27": {"target": 82.8, "actual": 0}, "Feb'27": {"target": 82.9, "actual": 0}, "Mar'27": {"target": 83.0, "actual": 0}}, "FY26": {"Apr'25": {"target": 83.9, "actual": 75.5}, "May'25": {"target": 84.4, "actual": 76.1}, "Jun'25": {"target": 84.7, "actual": 76.9}, "Jul'25": {"target": 84.3, "actual": 76.8}, "Aug'25": {"target": 84.6, "actual": 77.1}, "Sep'25": {"target": 84.4, "actual": 77.6}, "Oct'25": {"target": 83.7, "actual": 77.9}, "Nov'25": {"target": 83.7, "actual": 78.6}, "Dec'25": {"target": 84.1, "actual": 78.5}, "Jan'26": {"target": 84.2, "actual": 78.9}, "Feb'26": {"target": 84.0, "actual": 78.9}, "Mar'26": {"target": 86.3, "actual": 79.4}}}, "25M": {"FY27": {"Apr'26": {"target": 70.0, "actual": 65.2}, "May'26": {"target": 70.2, "actual": 66.2}, "Jun'26": {"target": 70.4, "actual": 67.1}, "Jul'26": {"target": 70.5, "actual": 67.4}, "Aug'26": {"target": 70.7, "actual": 0}, "Sep'26": {"target": 70.9, "actual": 0}, "Oct'26": {"target": 71.1, "actual": 0}, "Nov'26": {"target": 71.3, "actual": 0}, "Dec'26": {"target": 71.5, "actual": 0}, "Jan'27": {"target": 71.6, "actual": 0}, "Feb'27": {"target": 71.8, "actual": 0}, "Mar'27": {"target": 72.0, "actual": 0}}, "FY26": {"Apr'25": {"target": 73.1, "actual": 66.2}, "May'25": {"target": 73.2, "actual": 67.3}, "Jun'25": {"target": 73.5, "actual": 67.8}, "Jul'25": {"target": 73.0, "actual": 68.2}, "Aug'25": {"target": 73.1, "actual": 68.7}, "Sep'25": {"target": 73.2, "actual": 68.5}, "Oct'25": {"target": 72.6, "actual": 68.1}, "Nov'25": {"target": 72.7, "actual": 68.3}, "Dec'25": {"target": 72.8, "actual": 68.9}, "Jan'26": {"target": 72.3, "actual": 68.5}, "Feb'26": {"target": 72.5, "actual": 68.2}, "Mar'26": {"target": 72.6, "actual": 67.3}}}, "37M": {"FY27": {"Apr'26": {"target": 63.0, "actual": 61.2}, "May'26": {"target": 63.0, "actual": 62.1}, "Jun'26": {"target": 63.1, "actual": 62.3}, "Jul'26": {"target": 63.1, "actual": 62.0}, "Aug'26": {"target": 63.2, "actual": 0}, "Sep'26": {"target": 63.2, "actual": 0}, "Oct'26": {"target": 63.3, "actual": 0}, "Nov'26": {"target": 63.3, "actual": 0}, "Dec'26": {"target": 63.4, "actual": 0}, "Jan'27": {"target": 63.4, "actual": 0}, "Feb'27": {"target": 63.5, "actual": 0}, "Mar'27": {"target": 63.5, "actual": 0}}, "FY26": {"Apr'25": {"target": 63.3, "actual": 61.1}, "May'25": {"target": 64.0, "actual": 62.3}, "Jun'25": {"target": 64.5, "actual": 62.6}, "Jul'25": {"target": 64.0, "actual": 62.6}, "Aug'25": {"target": 64.4, "actual": 62.5}, "Sep'25": {"target": 64.6, "actual": 62.9}, "Oct'25": {"target": 64.2, "actual": 62.0}, "Nov'25": {"target": 64.5, "actual": 62.5}, "Dec'25": {"target": 64.7, "actual": 62.0}, "Jan'26": {"target": 64.4, "actual": 61.1}, "Feb'26": {"target": 64.6, "actual": 61.4}, "Mar'26": {"target": 65.0, "actual": 60.7}}}, "49M": {"FY27": {"Apr'26": {"target": 61.0, "actual": 56.6}, "May'26": {"target": 59.1, "actual": 57.6}, "Jun'26": {"target": 59.2, "actual": 57.3}, "Jul'26": {"target": 59.3, "actual": 57.4}, "Aug'26": {"target": 59.4, "actual": 0}, "Sep'26": {"target": 59.5, "actual": 0}, "Oct'26": {"target": 59.5, "actual": 0}, "Nov'26": {"target": 59.6, "actual": 0}, "Dec'26": {"target": 59.7, "actual": 0}, "Jan'27": {"target": 59.8, "actual": 0}, "Feb'27": {"target": 59.9, "actual": 0}, "Mar'27": {"target": 60.0, "actual": 0}}, "FY26": {"Apr'25": {"target": 55.6, "actual": 58.0}, "May'25": {"target": 57.4, "actual": 58.6}, "Jun'25": {"target": 58.1, "actual": 59.1}, "Jul'25": {"target": 58.1, "actual": 59.6}, "Aug'25": {"target": 58.5, "actual": 60.5}, "Sep'25": {"target": 59.0, "actual": 60.7}, "Oct'25": {"target": 58.4, "actual": 61.2}, "Nov'25": {"target": 59.5, "actual": 61.9}, "Dec'25": {"target": 60.1, "actual": 60.8}, "Jan'26": {"target": 60.0, "actual": 60.6}, "Feb'26": {"target": 60.5, "actual": 60.5}, "Mar'26": {"target": 61.1, "actual": 57.6}}}, "61M": {"FY27": {"Apr'26": {"target": 40.0, "actual": 42.8}, "May'26": {"target": 40.0, "actual": 43.4}, "Jun'26": {"target": 40.0, "actual": 54.9}, "Jul'26": {"target": 40.0, "actual": 55.4}, "Aug'26": {"target": 40.0, "actual": 0}, "Sep'26": {"target": 40.0, "actual": 0}, "Oct'26": {"target": 40.0, "actual": 0}, "Nov'26": {"target": 40.0, "actual": 0}, "Dec'26": {"target": 40.0, "actual": 0}, "Jan'27": {"target": 40.0, "actual": 0}, "Feb'27": {"target": 40.0, "actual": 0}, "Mar'27": {"target": 40.0, "actual": 0}}, "FY26": {"Apr'25": {"target": 50.0, "actual": 49.8}, "May'25": {"target": 52.0, "actual": 49.9}, "Jun'25": {"target": 53.0, "actual": 50.1}, "Jul'25": {"target": 54.0, "actual": 49.4}, "Aug'25": {"target": 55.0, "actual": 48.2}, "Sep'25": {"target": 55.3, "actual": 48.4}, "Oct'25": {"target": 54.3, "actual": 49.3}, "Nov'25": {"target": 55.3, "actual": 47.8}, "Dec'25": {"target": 55.7, "actual": 48.5}, "Jan'26": {"target": 55.5, "actual": 47.5}, "Feb'26": {"target": 55.9, "actual": 46.7}, "Mar'26": {"target": 56.0, "actual": 44.2}}}}}, "Online": {"accrual": {"FY27": {"Apr'26": {"target": 1.77, "actual": 2.29}, "May'26": {"target": 4.19, "actual": 3.51}, "Jun'26": {"target": 4.03, "actual": 3.96}, "Jul'26": {"target": 3.98, "actual": 3.86}, "Aug'26": {"target": 4.13, "actual": 0}, "Sep'26": {"target": 4.52, "actual": 0}, "Oct'26": {"target": 3.14, "actual": 0}, "Nov'26": {"target": 3.34, "actual": 0}, "Dec'26": {"target": 2.74, "actual": 0}, "Jan'27": {"target": 4.49, "actual": 0}, "Feb'27": {"target": 4.47, "actual": 0}, "Mar'27": {"target": 14.35, "actual": 0}}, "FY26": {"Apr'25": {"target": 2.43, "actual": 1.76}, "May'25": {"target": 4.97, "actual": 6.21}, "Jun'25": {"target": 5.25, "actual": 5.87}, "Jul'25": {"target": 5.8, "actual": 4.97}, "Aug'25": {"target": 4.91, "actual": 6.13}, "Sep'25": {"target": 4.97, "actual": 7.0}, "Oct'25": {"target": 4.96, "actual": 3.63}, "Nov'25": {"target": 4.39, "actual": 4.58}, "Dec'25": {"target": 7.14, "actual": -0.21}, "Jan'26": {"target": 6.86, "actual": 5.3}, "Feb'26": {"target": 7.27, "actual": 4.35}, "Mar'26": {"target": 18.6, "actual": 13.96}}}, "cash": {"FY27": {"Apr'26": {"target": 4.23, "actual": 4.61}, "May'26": {"target": 4.2, "actual": 4.12}, "Jun'26": {"target": 4.08, "actual": 3.95}, "Jul'26": {"target": 4.08, "actual": 3.92}, "Aug'26": {"target": 4.18, "actual": 0}, "Sep'26": {"target": 4.62, "actual": 0}, "Oct'26": {"target": 3.89, "actual": 0}, "Nov'26": {"target": 3.36, "actual": 0}, "Dec'26": {"target": 2.45, "actual": 0}, "Jan'27": {"target": 4.73, "actual": 0}, "Feb'27": {"target": 5.05, "actual": 0}, "Mar'27": {"target": 8.77, "actual": 0}}, "FY26": {"Apr'25": {"target": 5.17, "actual": 4.23}, "May'25": {"target": 4.87, "actual": 4.88}, "Jun'25": {"target": 4.67, "actual": 5.81}, "Jul'25": {"target": 5.1, "actual": 4.78}, "Aug'25": {"target": 4.9, "actual": 5.94}, "Sep'25": {"target": 4.88, "actual": 6.17}, "Oct'25": {"target": 5.36, "actual": 5.73}, "Nov'25": {"target": 4.78, "actual": 4.33}, "Dec'25": {"target": 6.21, "actual": -0.72}, "Jan'26": {"target": 7.04, "actual": 5.65}, "Feb'26": {"target": 8.03, "actual": 5.22}, "Mar'26": {"target": 18.61, "actual": 12.92}}}, "persistency": {"13M": {"FY27": {"Apr'26": {"target": 30.0, "actual": 27.4}, "May'26": {"target": 30.0, "actual": 27.8}, "Jun'26": {"target": 30.0, "actual": 27.7}, "Jul'26": {"target": 30.0, "actual": 26.8}, "Aug'26": {"target": 30.0, "actual": 0}, "Sep'26": {"target": 30.0, "actual": 0}, "Oct'26": {"target": 30.0, "actual": 0}, "Nov'26": {"target": 30.0, "actual": 0}, "Dec'26": {"target": 30.0, "actual": 0}, "Jan'27": {"target": 30.0, "actual": 0}, "Feb'27": {"target": 30.0, "actual": 0}, "Mar'27": {"target": 30.0, "actual": 0}}, "FY26": {"Apr'25": {"target": 59.5, "actual": 35.0}, "May'25": {"target": 60.4, "actual": 34.1}, "Jun'25": {"target": 61.1, "actual": 35.7}, "Jul'25": {"target": 60.1, "actual": 36.1}, "Aug'25": {"target": 58.2, "actual": 38.0}, "Sep'25": {"target": 56.8, "actual": 40.1}, "Oct'25": {"target": 55.6, "actual": 42.4}, "Nov'25": {"target": 53.9, "actual": 43.3}, "Dec'25": {"target": 52.5, "actual": 29.9}, "Jan'26": {"target": 50.3, "actual": 30.0}, "Feb'26": {"target": 51.5, "actual": 29.1}, "Mar'26": {"target": 54.0, "actual": 28.2}}}, "25M": {"FY27": {"Apr'26": {"target": 40.0, "actual": 19.8}, "May'26": {"target": 40.0, "actual": 17.6}, "Jun'26": {"target": 40.0, "actual": 15.3}, "Jul'26": {"target": 40.0, "actual": 15.8}, "Aug'26": {"target": 40.0, "actual": 0}, "Sep'26": {"target": 40.0, "actual": 0}, "Oct'26": {"target": 40.0, "actual": 0}, "Nov'26": {"target": 40.0, "actual": 0}, "Dec'26": {"target": 40.0, "actual": 0}, "Jan'27": {"target": 40.0, "actual": 0}, "Feb'27": {"target": 40.0, "actual": 0}, "Mar'27": {"target": 40.0, "actual": 0}}, "FY26": {"Apr'25": {"target": 43.0, "actual": 57.1}, "May'25": {"target": 43.5, "actual": 57.4}, "Jun'25": {"target": 44.0, "actual": 57.6}, "Jul'25": {"target": 45.0, "actual": 56.3}, "Aug'25": {"target": 46.1, "actual": 54.0}, "Sep'25": {"target": 47.9, "actual": 51.6}, "Oct'25": {"target": 48.8, "actual": 49.9}, "Nov'25": {"target": 49.0, "actual": 48.4}, "Dec'25": {"target": 49.5, "actual": 46.0}, "Jan'26": {"target": 51.0, "actual": 43.9}, "Feb'26": {"target": 52.3, "actual": 42.5}, "Mar'26": {"target": 53.7, "actual": 39.6}}}, "37M": {"FY27": {"Apr'26": {"target": 54.0, "actual": 55.3}, "May'26": {"target": 31.9, "actual": 55.6}, "Jun'26": {"target": 31.9, "actual": 55.2}, "Jul'26": {"target": 31.9, "actual": 54.2}, "Aug'26": {"target": 31.9, "actual": 0}, "Sep'26": {"target": 31.9, "actual": 0}, "Oct'26": {"target": 32.0, "actual": 0}, "Nov'26": {"target": 32.0, "actual": 0}, "Dec'26": {"target": 32.0, "actual": 0}, "Jan'27": {"target": 32.0, "actual": 0}, "Feb'27": {"target": 32.0, "actual": 0}, "Mar'27": {"target": 32.0, "actual": 0}}, "FY26": {"Apr'25": {"target": 19.9, "actual": 28.6}, "May'25": {"target": 20.1, "actual": 28.7}, "Jun'25": {"target": 20.4, "actual": 30.0}, "Jul'25": {"target": 20.6, "actual": 31.2}, "Aug'25": {"target": 21.0, "actual": 32.4}, "Sep'25": {"target": 21.4, "actual": 33.1}, "Oct'25": {"target": 22.3, "actual": 34.0}, "Nov'25": {"target": 23.5, "actual": 35.8}, "Dec'25": {"target": 24.4, "actual": 39.4}, "Jan'26": {"target": 27.7, "actual": 40.5}, "Feb'26": {"target": 28.0, "actual": 37.4}, "Mar'26": {"target": 29.0, "actual": 37.4}}}, "49M": {"FY27": {"Apr'26": {"target": 12.0, "actual": 24.4}, "May'26": {"target": 12.0, "actual": 24.6}, "Jun'26": {"target": 12.0, "actual": 24.9}, "Jul'26": {"target": 12.0, "actual": 25.8}, "Aug'26": {"target": 12.0, "actual": 0}, "Sep'26": {"target": 12.0, "actual": 0}, "Oct'26": {"target": 12.0, "actual": 0}, "Nov'26": {"target": 12.0, "actual": 0}, "Dec'26": {"target": 12.0, "actual": 0}, "Jan'27": {"target": 12.0, "actual": 0}, "Feb'27": {"target": 12.0, "actual": 0}, "Mar'27": {"target": 12.0, "actual": 0}}, "FY26": {"Apr'25": {"target": 10.0, "actual": 8.8}, "May'25": {"target": 11.0, "actual": 9.0}, "Jun'25": {"target": 12.0, "actual": 9.2}, "Jul'25": {"target": 12.0, "actual": 9.4}, "Aug'25": {"target": 14.0, "actual": 9.8}, "Sep'25": {"target": 14.0, "actual": 10.2}, "Oct'25": {"target": 14.5, "actual": 11.3}, "Nov'25": {"target": 13.5, "actual": 12.4}, "Dec'25": {"target": 13.5, "actual": 13.0}, "Jan'26": {"target": 13.5, "actual": 15.5}, "Feb'26": {"target": 14.0, "actual": 20.7}, "Mar'26": {"target": 15.0, "actual": 23.1}}}, "61M": {"FY27": {"Apr'26": {"target": 12.0, "actual": 7.4}, "May'26": {"target": 4.4, "actual": 7.6}, "Jun'26": {"target": 4.7, "actual": 7.7}, "Jul'26": {"target": 5.1, "actual": 7.8}, "Aug'26": {"target": 5.5, "actual": 0}, "Sep'26": {"target": 5.8, "actual": 0}, "Oct'26": {"target": 6.2, "actual": 0}, "Nov'26": {"target": 6.5, "actual": 0}, "Dec'26": {"target": 6.9, "actual": 0}, "Jan'27": {"target": 7.3, "actual": 0}, "Feb'27": {"target": 7.6, "actual": 0}, "Mar'27": {"target": 8.0, "actual": 0}}, "FY26": {"Apr'25": {"target": 13.0, "actual": 14.4}, "May'25": {"target": 14.0, "actual": 14.2}, "Jun'25": {"target": 14.5, "actual": 14.5}, "Jul'25": {"target": 15.0, "actual": 15.4}, "Aug'25": {"target": 15.3, "actual": 14.7}, "Sep'25": {"target": 15.4, "actual": 13.2}, "Oct'25": {"target": 14.5, "actual": 10.9}, "Nov'25": {"target": 14.8, "actual": 8.6}, "Dec'25": {"target": 15.0, "actual": 7.9}, "Jan'26": {"target": 15.1, "actual": 8.2}, "Feb'26": {"target": 15.4, "actual": 8.3}, "Mar'26": {"target": 15.8, "actual": 7.6}}}}}, "UK": {"accrual": {"FY27": {"Apr'26": {"target": 8.62, "actual": 5.44}, "May'26": {"target": 3.92, "actual": 2.68}, "Jun'26": {"target": -1.47, "actual": -2.9}, "Jul'26": {"target": 1.08, "actual": 0.35}, "Aug'26": {"target": 0, "actual": 0}, "Sep'26": {"target": 5.09, "actual": 0}, "Oct'26": {"target": -0.78, "actual": 0}, "Nov'26": {"target": 10.18, "actual": 0}, "Dec'26": {"target": 0, "actual": 0}, "Jan'27": {"target": 4.9, "actual": 0}, "Feb'27": {"target": 2.06, "actual": 0}, "Mar'27": {"target": 22.03, "actual": 0}}, "FY26": {"Apr'25": {"target": null, "actual": null}, "May'25": {"target": null, "actual": null}, "Jun'25": {"target": null, "actual": null}, "Jul'25": {"target": null, "actual": null}, "Aug'25": {"target": null, "actual": null}, "Sep'25": {"target": null, "actual": null}, "Oct'25": {"target": null, "actual": null}, "Nov'25": {"target": null, "actual": null}, "Dec'25": {"target": null, "actual": null}, "Jan'26": {"target": null, "actual": null}, "Feb'26": {"target": null, "actual": null}, "Mar'26": {"target": null, "actual": 5.47}}}, "cash": {"FY27": {"Apr'26": {"target": 5.28, "actual": 0.71}, "May'26": {"target": 5.05, "actual": 4.8}, "Jun'26": {"target": 1.15, "actual": 3.38}, "Jul'26": {"target": 0.82, "actual": 0.69}, "Aug'26": {"target": 0.3, "actual": 0}, "Sep'26": {"target": 3.19, "actual": 0}, "Oct'26": {"target": 1.15, "actual": 0}, "Nov'26": {"target": 6.43, "actual": 0}, "Dec'26": {"target": 3.37, "actual": 0}, "Jan'27": {"target": 3.62, "actual": 0}, "Feb'27": {"target": 3.0, "actual": 0}, "Mar'27": {"target": 13.51, "actual": 0}}, "FY26": {"Apr'25": {"target": null, "actual": null}, "May'25": {"target": null, "actual": null}, "Jun'25": {"target": null, "actual": null}, "Jul'25": {"target": null, "actual": null}, "Aug'25": {"target": null, "actual": null}, "Sep'25": {"target": null, "actual": null}, "Oct'25": {"target": null, "actual": null}, "Nov'25": {"target": null, "actual": null}, "Dec'25": {"target": null, "actual": null}, "Jan'26": {"target": null, "actual": null}, "Feb'26": {"target": null, "actual": null}, "Mar'26": {"target": null, "actual": 1.48}}}, "persistency": {"13M": {"FY27": {"Apr'26": {"target": 60.0, "actual": 31.3}, "May'26": {"target": 61.2, "actual": 54.3}, "Jun'26": {"target": 62.4, "actual": 63.8}, "Jul'26": {"target": 63.5, "actual": 64.0}, "Aug'26": {"target": 64.7, "actual": 0}, "Sep'26": {"target": 65.9, "actual": 0}, "Oct'26": {"target": 67.1, "actual": 0}, "Nov'26": {"target": 68.3, "actual": 0}, "Dec'26": {"target": 69.5, "actual": 0}, "Jan'27": {"target": 70.6, "actual": 0}, "Feb'27": {"target": 71.8, "actual": 0}, "Mar'27": {"target": 73.0, "actual": 0}}, "FY26": null}, "25M": {"FY27": null, "FY26": null}, "37M": {"FY27": null, "FY26": null}, "49M": {"FY27": null, "FY26": null}, "61M": {"FY27": null, "FY26": null}}}};
+
+const MONTHS_FY27 = ["Apr'26","May'26","Jun'26","Jul'26","Aug'26","Sep'26","Oct'26","Nov'26","Dec'26","Jan'27","Feb'27","Mar'27"];
+const MONTHS_FY26 = ["Apr'25","May'25","Jun'25","Jul'25","Aug'25","Sep'25","Oct'25","Nov'25","Dec'25","Jan'26","Feb'26","Mar'26"];
+const CHANNELS = ['Company', 'Agency', 'DD', 'PO', 'IM', 'Yodhha', 'CAB', 'Banca', 'Online', 'UK'];
+const COHORTS = ['13M', '25M', '37M', '49M', '61M'];
+
+function fmtCr(v) {
+  if (v === null || v === undefined) return '\u2014';
+  return '\u20B9' + Math.round(v).toLocaleString('en-IN') + ' Cr';
+}
+function fmtPct(v) {
+  if (v === null || v === undefined) return '\u2014';
+  return v.toFixed(1) + '%';
+}
+
+// Find the last month index (0-11) that has real reported data (non-null, non-zero)
+// by checking a representative series across all channels for a given metric.
+function lastReportedIndex(seriesArrays) {
+  for (let i = 11; i >= 0; i--) {
+    const hasReal = seriesArrays.some(arr => {
+      const v = arr[i];
+      return v !== null && v !== undefined && v !== 0;
+    });
+    if (hasReal) return i;
+  }
+  return -1;
+}
+
+function getMonthlySeries(monthlyObj, months) {
+  return months.map(m => {
+    const v = monthlyObj && monthlyObj[m];
+    return v ? v.actual : null;
+  });
+}
+function getTargetSeries(monthlyObj, months) {
+  return months.map(m => {
+    const v = monthlyObj && monthlyObj[m];
+    return v ? v.target : null;
+  });
+}
+
+function ytdSum(monthlyObj, months, uptoIdx) {
+  let t = 0, a = 0;
+  for (let i = 0; i <= uptoIdx; i++) {
+    const v = monthlyObj && monthlyObj[months[i]];
+    if (v) {
+      t += v.target || 0;
+      a += v.actual || 0;
+    }
+  }
+  return { target: t, actual: a };
+}
+
+// ---------- Tab bar ----------
+const tabBar = document.getElementById('tab-bar');
+CHANNELS.forEach((ch, i) => {
+  const btn = document.createElement('button');
+  btn.className = 'tab-btn' + (i === 0 ? ' active' : '') + (ch === 'Company' ? ' company-tab' : '');
+  btn.textContent = ch === 'Company' ? 'Company (Overall)' : ch;
+  btn.dataset.channel = ch;
+  btn.addEventListener('click', () => selectChannel(ch));
+  tabBar.appendChild(btn);
+});
+
+let charts = {};
+function destroyCharts() {
+  Object.values(charts).forEach(c => c && c.destroy());
+  charts = {};
+}
+
+function safeBuildChart(fn) {
+  try {
+    return fn();
+  } catch (e) {
+    console.error('Chart build failed:', e);
+    return null;
+  }
+}
+
+function selectChannel(ch) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.channel === ch));
+  renderChannel(ch);
+}
+
+function metricSection(title, unitNote, dataFY27, dataFY26) {
+  const actualFY27 = getMonthlySeries(dataFY27, MONTHS_FY27);
+  const targetFY27 = getTargetSeries(dataFY27, MONTHS_FY27);
+  const actualFY26 = getMonthlySeries(dataFY26, MONTHS_FY26);
+  const cutoff = lastReportedIndex([actualFY27]);
+
+  const ytd = ytdSum(dataFY27, MONTHS_FY27, cutoff >= 0 ? cutoff : -1);
+  const ytdLY = ytdSum(dataFY26, MONTHS_FY26, cutoff >= 0 ? cutoff : -1);
+  const achievement = ytd.target > 0 ? (ytd.actual / ytd.target * 100) : null;
+  const yoyDelta = ytdLY.actual > 0 ? ((ytd.actual - ytdLY.actual) / ytdLY.actual * 100) : null;
+
+  const id = title.replace(/\s+/g, '_');
+
+  return `
+    <div class="section">
+      <div class="section-head">
+        <h2>${title}</h2>
+        <span class="unit-note">${unitNote}</span>
+      </div>
+      <div class="stat-row">
+        <div class="stat-card">
+          <div class="label">YTD Target</div>
+          <div class="value target num">${fmtCr(ytd.target)}</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">YTD Actual</div>
+          <div class="value actual num">${fmtCr(ytd.actual)}</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Achievement</div>
+          <div class="value num">${achievement !== null ? achievement.toFixed(1) + '%' : '\u2014'}</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">vs LY (YTD)</div>
+          <div class="value num">${yoyDelta !== null ? (yoyDelta >= 0 ? '+' : '') + yoyDelta.toFixed(1) + '%' : '\u2014'}</div>
+          ${yoyDelta !== null ? `<div class="delta ${yoyDelta >= 0 ? 'good' : 'bad'}">${yoyDelta >= 0 ? '\u25B2 ahead of last year' : '\u25BC behind last year'}</div>` : ''}
+        </div>
+      </div>
+      <div class="legend-row">
+        <div class="legend-item"><span class="legend-dot" style="background:var(--target)"></span> Target FY27</div>
+        <div class="legend-item"><span class="legend-dot" style="background:var(--actual)"></span> Actual FY27</div>
+        <div class="legend-item"><span class="legend-dot" style="background:#C7CDD6"></span> Actual FY26 (LY)</div>
+      </div>
+      <div class="chart-wrap"><canvas id="chart_${id}"></canvas></div>
+      ${cutoff < 11 ? `<div class="not-reported-note">Actuals reported through ${MONTHS_FY27[cutoff]}; later months awaiting data.</div>` : ''}
+    </div>
+  `;
+}
+
+function buildMetricChart(canvasId, dataFY27, dataFY26) {
+  const targetFY27 = getTargetSeries(dataFY27, MONTHS_FY27);
+  const actualFY27raw = getMonthlySeries(dataFY27, MONTHS_FY27);
+  const actualFY26raw = getMonthlySeries(dataFY26, MONTHS_FY26);
+  const cutoff = lastReportedIndex([actualFY27raw]);
+  const actualFY27 = actualFY27raw.map((v, i) => (i <= cutoff ? v : null));
+
+  const ctx = document.getElementById(canvasId).getContext('2d');
+  const chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: MONTHS_FY27,
+      datasets: [
+        {
+          label: 'Target FY27', data: targetFY27,
+          borderColor: '#3B6E8F', backgroundColor: 'rgba(59,110,143,0.08)',
+          borderDash: [4, 3], tension: 0.2, pointRadius: 2, fill: false,
+        },
+        {
+          label: 'Actual FY27', data: actualFY27,
+          borderColor: '#D97B29', backgroundColor: 'rgba(217,123,41,0.12)',
+          tension: 0.2, pointRadius: 3, fill: true,
+        },
+        {
+          label: 'Actual FY26', data: actualFY26raw,
+          borderColor: '#C7CDD6', backgroundColor: 'transparent',
+          borderDash: [2, 2], tension: 0.2, pointRadius: 0, fill: false,
+        },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: true } },
+    },
+  });
+  return chart;
+}
+
+function cohortCard(cohort, dataFY27, dataFY26, isActive) {
+  if (!dataFY27) {
+    return `
+      <div class="cohort-card">
+        <div class="cohort-label">${cohort}</div>
+        <div class="not-tracked">Not tracked at this stage</div>
+      </div>
+    `;
+  }
+  const actuals = getMonthlySeries(dataFY27, MONTHS_FY27);
+  const targets = getTargetSeries(dataFY27, MONTHS_FY27);
+  const cutoff = lastReportedIndex([actuals]);
+  const latestActual = cutoff >= 0 ? actuals[cutoff] : null;
+  const latestTarget = cutoff >= 0 ? targets[cutoff] : null;
+  const hasTarget = latestTarget !== null && latestTarget !== undefined && latestTarget !== 0;
+  const gap = (latestActual !== null && hasTarget) ? (latestActual - latestTarget) : null;
+
+  return `
+    <div class="cohort-card${isActive ? ' active' : ''}" data-cohort="${cohort}">
+      <div class="cohort-label">${cohort}</div>
+      <div class="cohort-actual num">${fmtPct(latestActual)}</div>
+      <div class="cohort-target">Target: ${hasTarget ? fmtPct(latestTarget) : 'not set'}</div>
+      ${gap !== null ? `<span class="gap-tag ${gap >= 0 ? 'good' : 'bad'}">${gap >= 0 ? '+' : ''}${gap.toFixed(1)} pts</span>` : ''}
+    </div>
+  `;
+}
+
+function buildCohortChart(canvasId, dataFY27, dataFY26) {
+  const targetFY27 = getTargetSeries(dataFY27, MONTHS_FY27);
+  const actualFY27raw = getMonthlySeries(dataFY27, MONTHS_FY27);
+  const actualFY26raw = dataFY26 ? getMonthlySeries(dataFY26, MONTHS_FY26) : MONTHS_FY26.map(() => null);
+  const cutoff = lastReportedIndex([actualFY27raw]);
+  const actualFY27 = actualFY27raw.map((v, i) => (i <= cutoff ? v : null));
+
+  const ctx = document.getElementById(canvasId).getContext('2d');
+  return new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: MONTHS_FY27,
+      datasets: [
+        { label: 'Target FY27', data: targetFY27, borderColor: '#3B6E8F', borderDash: [4, 3], tension: 0.2, pointRadius: 2, fill: false },
+        { label: 'Actual FY27', data: actualFY27, borderColor: '#D97B29', backgroundColor: 'rgba(217,123,41,0.12)', tension: 0.2, pointRadius: 3, fill: true },
+        { label: 'Actual FY26', data: actualFY26raw, borderColor: '#C7CDD6', borderDash: [2, 2], tension: 0.2, pointRadius: 0, fill: false },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { y: { ticks: { callback: v => v + '%' } } },
+    },
+  });
+}
+
+let activeCohort = '13M';
+
+function renderChannel(ch) {
+  destroyCharts();
+  const d = RAW_DATA[ch];
+  const main = document.getElementById('main');
+
+  main.innerHTML = `
+    <div class="channel-title">${ch === 'Company' ? 'Company' : ch}</div>
+    <div class="channel-sub">${ch === 'Company' ? 'All channels combined \u2014 book-weighted' : 'Full performance history'} &middot; FY27 vs FY26</div>
+
+    ${metricSection('Accrual', 'Rs Crores', d.accrual.FY27, d.accrual.FY26)}
+    ${metricSection('Cash Collection', 'Rs Crores', d.cash.FY27, d.cash.FY26)}
+
+    <div class="section">
+      <div class="section-head">
+        <h2>Persistency \u2014 13M to 61M</h2>
+        <span class="unit-note">Latest reported month</span>
+      </div>
+      <div class="cohort-grid" id="cohort-grid"></div>
+      <div class="legend-row" style="margin-top:16px;">
+        <div class="legend-item"><span class="legend-dot" style="background:var(--target)"></span> Target FY27</div>
+        <div class="legend-item"><span class="legend-dot" style="background:var(--actual)"></span> Actual FY27</div>
+        <div class="legend-item"><span class="legend-dot" style="background:#C7CDD6"></span> Actual FY26 (LY)</div>
+      </div>
+      <div class="chart-wrap"><canvas id="chart_cohort"></canvas></div>
+    </div>
+  `;
+
+  charts['Accrual'] = safeBuildChart(() => buildMetricChart('chart_Accrual', d.accrual.FY27, d.accrual.FY26));
+  charts['Cash_Collection'] = safeBuildChart(() => buildMetricChart('chart_Cash_Collection', d.cash.FY27, d.cash.FY26));
+
+  const grid = document.getElementById('cohort-grid');
+  grid.innerHTML = COHORTS.map(c => cohortCard(c, d.persistency[c].FY27, d.persistency[c].FY26, c === activeCohort)).join('');
+  grid.querySelectorAll('.cohort-card[data-cohort]').forEach(card => {
+    card.addEventListener('click', () => {
+      activeCohort = card.dataset.cohort;
+      grid.querySelectorAll('.cohort-card').forEach(c => c.classList.remove('active'));
+      card.classList.add('active');
+      if (charts['cohort']) charts['cohort'].destroy();
+      charts['cohort'] = safeBuildChart(() => buildCohortChart('chart_cohort', d.persistency[activeCohort].FY27, d.persistency[activeCohort].FY26));
+    });
+  });
+  charts['cohort'] = safeBuildChart(() => buildCohortChart('chart_cohort', d.persistency[activeCohort].FY27, d.persistency[activeCohort].FY26));
+}
+
+renderChannel(CHANNELS[0]);
+
+</script>
+
+</body>
+</html>
