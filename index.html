@@ -199,6 +199,43 @@
   .legend-item { display: flex; align-items: center; gap: 6px; }
   .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
 
+  .view-toggle-bar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+  .view-toggle-label {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .view-toggle {
+    display: inline-flex;
+    gap: 2px;
+    padding: 3px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+  .view-btn {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--muted);
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 14px;
+    cursor: pointer;
+  }
+  .view-btn:hover { background: var(--bg); }
+  .view-btn.active { background: var(--ink); color: #fff; }
+  .view-btn:focus-visible { outline: 2px solid var(--target); outline-offset: 1px; }
+
   .cohort-grid {
     display: grid;
     grid-template-columns: repeat(5, 1fr);
@@ -466,6 +503,122 @@ function selectChannel(ch) {
   renderChannel(ch);
 }
 
+// ===== Accrual / Cash Collection chart view toggle =====
+// 'pct'    -> Achievement % (original view)
+// 'actual' -> Target FY27 vs Actual FY27 vs Actual FY26 in Rs Crores
+// One shared value drives both charts and survives channel tab switches.
+let metricView = 'pct';
+let currentChannel = CHANNELS[0];
+
+function metricLegendHtml(view) {
+  if (view === 'actual') {
+    return `
+      <div class="legend-item"><span class="legend-dot" style="background:var(--target)"></span> Target FY27</div>
+      <div class="legend-item"><span class="legend-dot" style="background:var(--actual)"></span> Actual FY27</div>
+      <div class="legend-item"><span class="legend-dot" style="background:#C7CDD6"></span> Actual FY26 (LY)</div>
+    `;
+  }
+  return `
+    <div class="legend-item"><span class="legend-dot" style="background:var(--target)"></span> 100% Target</div>
+    <div class="legend-item"><span class="legend-dot" style="background:var(--actual)"></span> Achievement % FY27</div>
+    <div class="legend-item"><span class="legend-dot" style="background:#C7CDD6"></span> Achievement % FY26 (LY)</div>
+  `;
+}
+
+// Rs Crore values keep 2 decimals so small channels (IM, PO, Yodhha) don't collapse to 0 / 1 / 2.
+function fmtRsCr(v) {
+  return 'Rs ' + v.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' Cr';
+}
+
+function buildMetricActualChart(canvasId, dataFY27, dataFY26) {
+  const targetFY27 = getTargetSeries(dataFY27, MONTHS_FY27);
+  const actualFY27raw = getMonthlySeries(dataFY27, MONTHS_FY27);
+  const actualFY26 = getMonthlySeries(dataFY26, MONTHS_FY26);
+  const cutoff = lastReportedIndex([actualFY27raw]);
+  const actualFY27 = actualFY27raw.map((v, i) => (i <= cutoff ? v : null));
+
+  const ctx = document.getElementById(canvasId).getContext('2d');
+  return new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: MONTHS_FY27,
+      datasets: [
+        {
+          label: 'Target FY27', data: targetFY27,
+          borderColor: '#3B6E8F', backgroundColor: 'transparent',
+          borderDash: [4, 3], tension: 0.2, pointRadius: 0, pointHoverRadius: 4, fill: false,
+        },
+        {
+          label: 'Actual FY27', data: actualFY27,
+          borderColor: '#D97B29', backgroundColor: 'rgba(217,123,41,0.12)',
+          tension: 0.2, pointRadius: 3, pointHoverRadius: 5, fill: true,
+        },
+        {
+          label: 'Actual FY26', data: actualFY26,
+          borderColor: '#C7CDD6', backgroundColor: 'transparent',
+          borderDash: [2, 2], tension: 0.2, pointRadius: 0, pointHoverRadius: 4, fill: false,
+        },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          filter: item => item.parsed.y !== null && item.parsed.y !== undefined,
+          callbacks: {
+            label: item => `${item.dataset.label}: ${fmtRsCr(item.parsed.y)}`,
+            labelColor: item => ({
+              borderColor: item.dataset.borderColor,
+              backgroundColor: item.dataset.borderColor,
+            }),
+          },
+        },
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          title: { display: true, text: 'Rs Cr' },
+          ticks: { callback: v => Number(v).toLocaleString('en-IN', { maximumFractionDigits: 2 }) },
+        },
+      },
+    },
+  });
+}
+
+function buildMetricChartByView(canvasId, dataFY27, dataFY26) {
+  return metricView === 'actual'
+    ? buildMetricActualChart(canvasId, dataFY27, dataFY26)
+    : buildMetricChart(canvasId, dataFY27, dataFY26);
+}
+
+// Builds (or rebuilds) only the Accrual and Cash Collection charts + their legends.
+// Persistency cohort chart is intentionally not touched here.
+function renderMetricCharts(ch) {
+  const d = RAW_DATA[ch];
+  [
+    { key: 'Accrual', canvas: 'chart_Accrual', legend: 'legend_Accrual', fy27: d.accrual.FY27, fy26: d.accrual.FY26 },
+    { key: 'Cash_Collection', canvas: 'chart_Cash_Collection', legend: 'legend_Cash_Collection', fy27: d.cash.FY27, fy26: d.cash.FY26 },
+  ].forEach(m => {
+    if (charts[m.key]) { charts[m.key].destroy(); charts[m.key] = null; }
+    const legendEl = document.getElementById(m.legend);
+    if (legendEl) legendEl.innerHTML = metricLegendHtml(metricView);
+    charts[m.key] = safeBuildChart(() => buildMetricChartByView(m.canvas, m.fy27, m.fy26));
+  });
+}
+
+function setMetricView(view) {
+  if (view === metricView) return;
+  metricView = view;
+  document.querySelectorAll('.view-btn').forEach(b => {
+    const on = b.dataset.view === view;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-pressed', String(on));
+  });
+  renderMetricCharts(currentChannel);
+}
+
 function metricSection(title, unitNote, dataFY27, dataFY26) {
   const actualFY27 = getMonthlySeries(dataFY27, MONTHS_FY27);
   const targetFY27 = getTargetSeries(dataFY27, MONTHS_FY27);
@@ -504,11 +657,7 @@ function metricSection(title, unitNote, dataFY27, dataFY26) {
           ${yoyDelta !== null ? `<div class="delta ${yoyDelta >= 0 ? 'good' : 'bad'}">${yoyDelta >= 0 ? '\u25B2 ahead of last year' : '\u25BC behind last year'}</div>` : ''}
         </div>
       </div>
-      <div class="legend-row">
-        <div class="legend-item"><span class="legend-dot" style="background:var(--target)"></span> 100% Target</div>
-        <div class="legend-item"><span class="legend-dot" style="background:var(--actual)"></span> Achievement % FY27</div>
-        <div class="legend-item"><span class="legend-dot" style="background:#C7CDD6"></span> Achievement % FY26 (LY)</div>
-      </div>
+      <div class="legend-row" id="legend_${id}">${metricLegendHtml(metricView)}</div>
       <div class="chart-wrap"><canvas id="chart_${id}"></canvas></div>
       ${cutoff < 11 ? `<div class="not-reported-note">Actuals reported through ${MONTHS_FY27[cutoff]}; later months awaiting data.</div>` : ''}
     </div>
@@ -625,12 +774,21 @@ let activeCohort = '13M';
 
 function renderChannel(ch) {
   destroyCharts();
+  currentChannel = ch;
   const d = RAW_DATA[ch];
   const main = document.getElementById('main');
 
   main.innerHTML = `
     <div class="channel-title">${ch === 'Company' ? 'Company' : ch}</div>
     <div class="channel-sub">${ch === 'Company' ? 'All channels combined \u2014 book-weighted' : 'Full performance history'} &middot; FY27 vs FY26</div>
+
+    <div class="view-toggle-bar">
+      <span class="view-toggle-label">Chart view</span>
+      <div class="view-toggle" role="group" aria-label="Accrual and Cash Collection chart view">
+        <button type="button" class="view-btn${metricView === 'pct' ? ' active' : ''}" data-view="pct" aria-pressed="${metricView === 'pct'}">Achievement %</button>
+        <button type="button" class="view-btn${metricView === 'actual' ? ' active' : ''}" data-view="actual" aria-pressed="${metricView === 'actual'}">Actual (Rs Cr)</button>
+      </div>
+    </div>
 
     ${metricSection('Accrual', 'Rs Crores', d.accrual.FY27, d.accrual.FY26)}
     ${metricSection('Cash Collection', 'Rs Crores', d.cash.FY27, d.cash.FY26)}
@@ -650,8 +808,10 @@ function renderChannel(ch) {
     </div>
   `;
 
-  charts['Accrual'] = safeBuildChart(() => buildMetricChart('chart_Accrual', d.accrual.FY27, d.accrual.FY26));
-  charts['Cash_Collection'] = safeBuildChart(() => buildMetricChart('chart_Cash_Collection', d.cash.FY27, d.cash.FY26));
+  main.querySelectorAll('.view-btn').forEach(btn => {
+    btn.addEventListener('click', () => setMetricView(btn.dataset.view));
+  });
+  renderMetricCharts(ch);
 
   const grid = document.getElementById('cohort-grid');
   grid.innerHTML = COHORTS.map(c => cohortCard(c, d.persistency[c].FY27, d.persistency[c].FY26, c === activeCohort)).join('');
