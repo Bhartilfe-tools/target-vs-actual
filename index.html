@@ -206,35 +206,46 @@
     gap: 12px;
     margin-bottom: 14px;
   }
-  .view-toggle-label {
-    font-size: 11.5px;
-    font-weight: 600;
-    color: var(--muted);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-  }
-  .view-toggle {
+  /* On/off slider switch: OFF = Achievement %, ON = Actual (Rs Cr) */
+  .view-switch {
     display: inline-flex;
-    gap: 2px;
-    padding: 3px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-  }
-  .view-btn {
+    align-items: center;
+    gap: 10px;
     font-family: 'IBM Plex Sans', sans-serif;
     font-size: 12.5px;
     font-weight: 600;
     color: var(--muted);
     background: transparent;
     border: none;
-    border-radius: 6px;
-    padding: 6px 14px;
+    padding: 4px 2px;
     cursor: pointer;
   }
-  .view-btn:hover { background: var(--bg); }
-  .view-btn.active { background: var(--ink); color: #fff; }
-  .view-btn:focus-visible { outline: 2px solid var(--target); outline-offset: 1px; }
+  .view-switch .vs-track {
+    position: relative;
+    flex: none;
+    width: 42px;
+    height: 24px;
+    border-radius: 12px;
+    background: #C7CDD6;
+    transition: background 0.18s ease;
+  }
+  .view-switch .vs-knob {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+    transition: transform 0.18s ease;
+  }
+  .view-switch .vs-left { color: var(--ink); }
+  .view-switch[aria-checked="true"] .vs-track { background: var(--target); }
+  .view-switch[aria-checked="true"] .vs-knob { transform: translateX(18px); }
+  .view-switch[aria-checked="true"] .vs-left { color: var(--muted); }
+  .view-switch[aria-checked="true"] .vs-right { color: var(--ink); }
+  .view-switch:focus-visible .vs-track { outline: 2px solid var(--target); outline-offset: 2px; }
 
   .cohort-grid {
     display: grid;
@@ -608,14 +619,30 @@ function renderMetricCharts(ch) {
   });
 }
 
-function setMetricView(view) {
-  if (view === metricView) return;
-  metricView = view;
-  document.querySelectorAll('.view-btn').forEach(b => {
-    const on = b.dataset.view === view;
-    b.classList.toggle('active', on);
-    b.setAttribute('aria-pressed', String(on));
-  });
+const METRIC_VIEW_NAMES = { pct: 'Achievement %', actual: 'Actual (Rs Cr)' };
+
+// On/off slider switch. OFF = Achievement %, ON = Actual (Rs Cr).
+// Only attributes change on click (no re-render), so the knob slides smoothly.
+function viewSwitchHtml() {
+  const on = metricView === 'actual';
+  return `
+    <button type="button" class="view-switch" id="view-switch" role="switch"
+            aria-checked="${on}" data-view="${metricView}"
+            aria-label="Show Actual (Rs Cr) instead of Achievement %">
+      <span class="vs-label vs-left">${METRIC_VIEW_NAMES.pct}</span>
+      <span class="vs-track" aria-hidden="true"><span class="vs-knob"></span></span>
+      <span class="vs-label vs-right">${METRIC_VIEW_NAMES.actual}</span>
+    </button>
+  `;
+}
+
+function toggleMetricView() {
+  metricView = metricView === 'pct' ? 'actual' : 'pct';
+  const sw = document.getElementById('view-switch');
+  if (sw) {
+    sw.setAttribute('aria-checked', String(metricView === 'actual'));
+    sw.dataset.view = metricView;
+  }
   renderMetricCharts(currentChannel);
 }
 
@@ -783,11 +810,7 @@ function renderChannel(ch) {
     <div class="channel-sub">${ch === 'Company' ? 'All channels combined \u2014 book-weighted' : 'Full performance history'} &middot; FY27 vs FY26</div>
 
     <div class="view-toggle-bar">
-      <span class="view-toggle-label">Chart view</span>
-      <div class="view-toggle" role="group" aria-label="Accrual and Cash Collection chart view">
-        <button type="button" class="view-btn${metricView === 'pct' ? ' active' : ''}" data-view="pct" aria-pressed="${metricView === 'pct'}">Achievement %</button>
-        <button type="button" class="view-btn${metricView === 'actual' ? ' active' : ''}" data-view="actual" aria-pressed="${metricView === 'actual'}">Actual (Rs Cr)</button>
-      </div>
+      ${viewSwitchHtml()}
     </div>
 
     ${metricSection('Accrual', 'Rs Crores', d.accrual.FY27, d.accrual.FY26)}
@@ -808,9 +831,7 @@ function renderChannel(ch) {
     </div>
   `;
 
-  main.querySelectorAll('.view-btn').forEach(btn => {
-    btn.addEventListener('click', () => setMetricView(btn.dataset.view));
-  });
+  document.getElementById('view-switch').addEventListener('click', toggleMetricView);
   renderMetricCharts(ch);
 
   const grid = document.getElementById('cohort-grid');
