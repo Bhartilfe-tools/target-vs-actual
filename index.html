@@ -103,6 +103,15 @@
     border-color: var(--target);
   }
 
+  .tab-btn.leaderboard-link {
+    background: var(--actual);
+    color: #fff;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+  }
+  .tab-btn.leaderboard-link:hover { background: #C26A1F; }
+
   main {
     max-width: 1280px;
     margin: 0 auto;
@@ -361,6 +370,22 @@ function pfon(v){
   return isNaN(n) ? null : n;
 }
 
+// Persistency cells -> percent number (81.3 means 81.3%).
+// Google's CSV sends the *formatted* text of each cell, so the same value can arrive as
+// "81.3%" (cell formatted as percent), "0.813" (plain fraction) or "81.3" (typed as a number).
+// With a "%" sign the number is already a percent; without one, a value up to 1.5 is a
+// fraction (no persistency is 1.5% or below on the sheet), anything bigger is already a percent.
+function pctVal(v){
+  if(v === undefined || v === null) return null;
+  const s = String(v).trim();
+  if(s === '' || /^(na|n\/a|-)$/i.test(s)) return null;
+  const hasPercentSign = s.includes('%');
+  const n = parseFloat(s.replace(/[%,\s]/g, ''));
+  if(isNaN(n)) return null;
+  const pct = (hasPercentSign || Math.abs(n) > 1.5) ? n : n * 100;
+  return Math.round(pct * 1e6) / 1e6;
+}
+
 async function fetchSheetTab(tabName){
   const url = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tabName)}`;
   const res = await fetch(url);
@@ -378,13 +403,8 @@ function reshapeWideTab(rows, isPercent){
     if(!channel) return;
     const monthly = {};
     MONTHS_FY27.forEach((m, i) => {
-      let t = pfon(row[1 + i*2]);
-      let a = pfon(row[2 + i*2]);
-      if(isPercent){
-        if(t !== null) t = t * 100;
-        if(a !== null) a = a * 100;
-      }
-      monthly[m] = {target: t, actual: a};
+      const parse = isPercent ? pctVal : pfon;
+      monthly[m] = {target: parse(row[1 + i*2]), actual: parse(row[2 + i*2])};
     });
     out[channel] = monthly;
   });
@@ -493,6 +513,14 @@ CHANNELS.forEach((ch, i) => {
   btn.addEventListener('click', () => selectChannel(ch));
   tabBar.appendChild(btn);
 });
+// Link to the Channel Leaderboard page (separate page, same live sheet)
+(function(){
+  const a = document.createElement('a');
+  a.className = 'tab-btn leaderboard-link';
+  a.href = 'leaderboard.html';
+  a.innerHTML = '&#9733; Channel Leaderboard';
+  tabBar.insertBefore(a, tabBar.firstChild);
+})();
 
 let charts = {};
 function destroyCharts() {

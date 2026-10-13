@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Channel Leaderboard — Target vs Actual</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#F5F6F8;--surface:#FFF;--ink:#1A2332;--muted:#6B7280;--border:#E4E7EC;--target:#3B6E8F;--actual:#D97B29;--good:#2F9E64;--bad:#D14343;
+--h0:#B4234A;--h1:#D97C9B;--h2:#D9D6D0;--h3:#9FB0B5;--h4:#5E7680}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:'IBM Plex Sans','Segoe UI',Arial,sans-serif}
+.num{font-family:'IBM Plex Mono',Consolas,monospace;font-weight:600}
+header{background:var(--ink);padding:22px 32px 18px}header h1{margin:0;color:#fff;font-size:22px}header .sub{color:#9AA5B8;font-size:13px;margin-top:3px}
+.sample-banner{background:var(--actual);color:#fff;text-align:center;font-size:12.5px;font-weight:600;padding:7px}
+.tab-bar{display:flex;flex-wrap:wrap;gap:6px;background:#fff;border-bottom:1px solid var(--border);padding:10px 32px}
+.tab-btn{font-family:inherit;font-size:13px;font-weight:600;text-decoration:none;background:transparent;color:var(--muted);border:1px solid transparent;border-radius:6px;padding:7px 14px}
+.tab-btn.lead{background:var(--actual);color:#fff}.tab-btn.company-tab{border:1.5px solid var(--target);font-weight:700}
+main{max-width:1280px;margin:0 auto;padding:24px 32px 50px}
+.title{font-size:26px;font-weight:700;margin:4px 0 2px}.subt{color:var(--muted);font-size:13px;margin-bottom:20px}
+.leaders{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px}
+.lc{background:#fff;border:1px solid var(--border);border-top:4px solid var(--target);border-radius:10px;padding:14px 16px}
+.lc.ov{border-top-color:var(--actual);background:#FFF8F0}
+.lc .k{font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--muted);text-transform:uppercase}
+.lc .ch{font-size:22px;font-weight:700;margin-top:6px}.lc .v{font-size:13px;color:var(--muted);margin-top:3px}
+.lc .v b{color:var(--ink)}.lc .ru{font-size:11.5px;color:var(--muted);margin-top:8px;border-top:1px dashed var(--border);padding-top:7px}
+.section{background:#fff;border:1px solid var(--border);border-radius:10px;padding:20px 22px;margin-bottom:20px}
+.shead{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:12px}
+.shead h2{font-size:16px;margin:0}.shead .note{font-size:11.5px;color:var(--muted)}
+.legend{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--muted)}
+.legend i{display:inline-block;width:26px;height:12px;border-radius:2px}
+table{width:100%;border-collapse:separate;border-spacing:3px}
+th{font-size:11px;font-weight:700;color:var(--muted);text-align:center;padding:4px 4px 8px;line-height:1.25;vertical-align:bottom}
+th.grp{font-size:10.5px;letter-spacing:.06em;color:var(--ink);border-bottom:2px solid var(--ink);padding-bottom:4px}
+td{text-align:center;padding:9px 4px;font-size:14px;border-radius:3px}
+td.rk{width:34px;color:var(--muted);font-weight:700}
+td.chn{text-align:left;font-weight:700;background:#F0F2F5;padding-left:12px;width:110px}
+td.sc{font-size:22px;font-weight:700;background:#fff;width:70px}
+tr.first td.chn{background:#FBEDDD}tr.first td.sc{color:var(--actual)}
+td.h0{background:var(--h0);color:#fff}td.h1{background:var(--h1);color:#fff}td.h2{background:var(--h2)}td.h3{background:var(--h3);color:#fff}td.h4{background:var(--h4);color:#fff}
+td small{display:block;font-size:10px;font-weight:500;opacity:.9;font-family:'IBM Plex Sans',Arial,sans-serif}
+.foot{font-size:11.5px;color:var(--muted);line-height:1.55;margin-top:10px;border-top:1px solid var(--border);padding-top:10px}
+.foot b{color:var(--ink)}
+
+td.ref{background:#F7F8FA!important;color:var(--muted)!important}
+tr.refrow td.chn{background:#fff;color:var(--muted);font-style:italic}
+td.hits{font-size:12px;color:var(--muted);width:60px}
+.paths{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+.pc{border:1px solid var(--border);border-left:4px solid var(--target);border-radius:8px;padding:12px 14px;font-size:13px}
+.pc.lead{border-left-color:var(--actual);background:#FFF8F0}
+.pc h3{margin:0 0 4px;font-size:15px;display:flex;justify-content:space-between}.pc h3 span{font-size:12px;color:var(--muted);font-weight:600}
+.pc ul{margin:6px 0 0;padding-left:18px}.pc li{margin:3px 0}.pc .res{margin-top:6px;font-size:12px;color:var(--good);font-weight:700}
+.pchips{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin-bottom:20px}
+.chip{background:#fff;border:1px solid var(--border);border-radius:8px;padding:9px 10px}
+.chip .k{font-size:10.5px;font-weight:700;letter-spacing:.06em;color:var(--muted)}
+.chip .c{font-size:15px;font-weight:700;margin-top:3px}.chip .v{font-size:11.5px;color:var(--muted)}
+td.na{background:#F3F4F6;color:#9CA3AF;font-size:12px}
+
+header{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+.back{color:#fff;text-decoration:none;border:1px solid #4B5768;border-radius:6px;padding:7px 12px;font-size:12.5px;font-weight:600}
+.back:hover{background:#2A3547}
+.asof{background:var(--target);color:#fff;text-align:center;font-size:12.5px;font-weight:600;padding:7px}
+.table-scroll{overflow-x:auto}
+#state{max-width:600px;margin:60px auto;text-align:center;color:var(--muted);font-size:14px}
+#state .err{color:var(--bad);font-weight:600}
+@media (max-width:900px){.leaders{grid-template-columns:repeat(2,1fr)}.pchips{grid-template-columns:repeat(4,1fr)}.paths{grid-template-columns:1fr}}
+@media (max-width:560px){.shead{flex-wrap:wrap;gap:8px}header,main{padding-left:16px;padding-right:16px}.leaders{grid-template-columns:1fr}.pchips{grid-template-columns:repeat(2,1fr)}table{min-width:860px}}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>Channel Leaderboard</h1><div class="sub">Target vs Actual &middot; FY27 &middot; Board Target</div></div>
+  <a class="back" href="./">&larr; Back to Target vs Actual</a>
+</header>
+<div class="asof" id="asof">Loading live data&hellip;</div>
+<div id="state">Loading live data from Google Sheets&hellip;</div>
+<main id="main" style="display:none">
+  <div class="title">Who is closest to target?</div>
+  <div class="subt" id="subt"></div>
+  <div class="leaders" id="leaders"></div>
+  <div class="pchips" id="chips"></div>
+  <div class="section">
+    <div class="shead"><div><h2>Channel Scorecard</h2><div class="note">Accrual &amp; Cash = achievement % of YTD target &middot; Persistency = actual, with variance vs target below</div></div>
+    <div class="legend">Colour by achievement: &lt;85% <i style="background:var(--h0)"></i><i style="background:var(--h1)"></i>95% <i style="background:var(--h2)"></i>100% <i style="background:var(--h3)"></i><i style="background:var(--h4)"></i> 105%+</div></div>
+    <div class="table-scroll"><table id="tbl"></table></div>
+    <div class="foot" id="foot"></div>
+  </div>
+  <div class="section">
+    <div class="shead"><div><h2>Path to #1</h2><div class="note">What each channel has to fix to overtake the leader &middot; closest gaps first (quickest wins) &middot; every 7 points of achievement on any one parameter = 1 point of overall score</div></div></div>
+    <div class="paths" id="paths"></div>
+  </div>
+</main>
+<script src="leaderboard-core.js"></script>
+<script>
+(function(){
+const LB=window.TVALeaderboard;
+const isBiz=k=>k==='Accrual'||k==='Cash';
+const band=v=>v<85?'h0':v<95?'h1':v<100?'h2':v<105?'h3':'h4';
+const sgn=v=>(v>=0?'+':'')+v.toFixed(1);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function render(R){
+  const P=LB.PARAMS, rows=R.rows, L=rows[0];
+  const ytdLabel=`${R.accFrom} &ndash; ${R.accTo}`;
+  document.getElementById('asof').innerHTML=`Live from the Target vs Actual sheet &middot; Accrual &amp; Cash: YTD ${ytdLabel} &middot; Persistency: ${R.persMonth} closing`;
+  document.getElementById('subt').innerHTML=`Every parameter carries equal weight and channel size does not matter &middot; updates automatically when a new month is filled in the sheet`;
+  const by=f=>rows.filter(r=>f(r)!=null).sort((a,b)=>f(b)-f(a));
+  const card=(cls,k,list,f,txt)=>!list.length?'':`<div class="lc ${cls}"><div class="k">${k}</div><div class="ch">${esc(list[0].ch)}</div><div class="v">${txt(list[0])}</div>${list.length>2?`<div class="ru">Next: ${esc(list[1].ch)} (${f(list[1]).toFixed(1)}) &middot; ${esc(list[2].ch)} (${f(list[2]).toFixed(1)})</div>`:''}</div>`;
+  const fS=r=>r.score, fA=r=>r.d.Accrual?r.d.Accrual.ach:null, fC=r=>r.d.Cash?r.d.Cash.ach:null, fP=r=>r.pers;
+  document.getElementById('leaders').innerHTML=
+    card('ov','Overall leader',by(fS),fS,r=>`Score <b>${r.score.toFixed(1)}</b> &middot; ${r.hits} of ${r.n} parameters on target`)+
+    card('','Accrual leader',by(fA),fA,r=>`<b>${fA(r).toFixed(1)}%</b> of YTD target`)+
+    card('','Cash leader',by(fC),fC,r=>`<b>${fC(r).toFixed(1)}%</b> of YTD target`)+
+    card('','Persistency leader',by(fP),fP,r=>`<b>${r.pers.toFixed(1)}</b> avg achievement, 13M&ndash;61M`);
+  document.getElementById('chips').innerHTML=P.map(k=>{const l=rows.filter(r=>r.d[k]).sort((a,b)=>b.d[k].ach-a.d[k].ach)[0];
+    if(!l)return '';const x=l.d[k];
+    return `<div class="chip"><div class="k">#1 IN ${k.toUpperCase()}</div><div class="c">${esc(l.ch)}</div><div class="v">${isBiz(k)?x.ach.toFixed(1)+'% of target':x.a.toFixed(1)+'% ('+sgn(x.gap)+'% vs target)'}</div></div>`;}).join('');
+  const cell=(x,k,ref)=>{if(!x)return `<td class="na">no data</td>`;
+    if(isBiz(k))return `<td class="num ${ref?'ref':band(x.ach)}">${x.ach.toFixed(1)}%<small>&#8377;${Math.round(x.a)} / ${Math.round(x.t)} Cr</small></td>`;
+    return `<td class="num ${ref?'ref':band(x.ach)}">${x.a.toFixed(1)}%<small>${sgn(x.gap)}% vs target</small></td>`;};
+  let h=`<tr><th></th><th></th><th></th><th></th><th colspan="2" class="grp">BUSINESS (YTD ${R.accTo.toUpperCase()})</th><th colspan="5" class="grp">PERSISTENCY (${R.persMonth.toUpperCase()} CLOSING &middot; ACTUAL &amp; VARIANCE)</th></tr>
+  <tr><th>#</th><th style="text-align:left">Channel</th><th>Overall<br>score</th><th>Hits</th>${P.map(k=>`<th>${k}</th>`).join('')}</tr>`;
+  rows.forEach((r,i)=>{h+=`<tr class="${i?'':'first'}"><td class="rk">${i+1}</td><td class="chn">${esc(r.ch)}</td><td class="sc num">${r.score.toFixed(1)}</td><td class="hits">${r.hits} / ${r.n}</td>${P.map(k=>cell(r.d[k],k)).join('')}</tr>`;});
+  h+=`<tr class="refrow"><td class="rk">&ndash;</td><td class="chn">Company</td><td class="sc num" style="color:var(--muted);font-size:13px">ref</td><td class="hits"></td>${P.map(k=>cell(R.company[k],k,true)).join('')}</tr>`;
+  document.getElementById('tbl').innerHTML=h;
+  const miss=R.missing.map(m=>`${esc(m.ch)} has no ${m.absent.join(', ')} data in the sheet, so its score uses ${m.n} parameters`).join('. ');
+  document.getElementById('foot').innerHTML=`<b>How the score works:</b> each of the 7 parameters (Accrual, Cash, 13M, 25M, 37M, 49M, 61M) is turned into Achievement % = Actual &divide; Target. Accrual and Cash use the YTD total (all months from ${R.accFrom} to the latest reported month added together); persistency uses the latest month's closing. Overall score = simple average of the 7, so every parameter counts equally and a big channel gets no advantage over a small one. Achievement is capped at ${LB.CAP}% per parameter so one very low target cannot carry a channel. <b>Hits</b> = parameters at or above target. Yodhha and Online are not ranked; Company is shown for reference only.${miss?' '+miss+'.':''}`;
+  const need=s=>{const x=s.from,k=s.param;
+    if(isBiz(k))return `${k}: +&#8377;${Math.max(0,x.t*s.toAch/100-x.a).toFixed(1)} Cr YTD (achv ${x.ach.toFixed(1)}% &rarr; ${s.toAch.toFixed(0)}%)${s.toAch>100?' &mdash; above target':''}`;
+    const to=x.t*s.toAch/100;return `${k}: ${x.a.toFixed(1)}% &rarr; ${to.toFixed(1)}% (+${(to-x.a).toFixed(1)}%)${s.toAch>100?' &mdash; above target':''}`;};
+  const weak=P.filter(k=>L.d[k]&&L.d[k].ach<100).sort((a,b)=>L.d[a].ach-L.d[b].ach).slice(0,3);
+  let ph=`<div class="pc lead"><h3>${esc(L.ch)} <span>#1 &middot; score ${L.score.toFixed(1)}</span></h3>${rows[1]?`Leads ${esc(rows[1].ch)} by ${(L.score-rows[1].score).toFixed(1)} points.`:''}${weak.length?` To stay on top, protect the weakest spots:<ul>${weak.map(k=>`<li>${k}: ${isBiz(k)?L.d[k].ach.toFixed(1)+'% of target':sgn(L.d[k].gap)+'% vs target'}</li>`).join('')}</ul>`:' Every parameter is on target.'}</div>`;
+  rows.slice(1).forEach((r,i)=>{const p=LB.pathTo1(r,L);
+    ph+=`<div class="pc"><h3>${esc(r.ch)} <span>#${i+2} &middot; ${r.score.toFixed(1)} &middot; ${(L.score-r.score).toFixed(1)} pts behind</span></h3>To overtake ${esc(L.ch)}:<ul>${p.steps.map(s=>`<li>${need(s)}</li>`).join('')}</ul>${p.ok?`<div class="res">&rarr; new score ${p.newScore.toFixed(1)}, rank #1</div>`:`<div class="res" style="color:var(--bad)">Even at ${LB.CAP}% on every parameter, cannot pass ${esc(L.ch)} this month</div>`}</div>`;});
+  document.getElementById('paths').innerHTML=ph;
+  document.getElementById('state').style.display='none';
+  document.getElementById('main').style.display='block';
+}
+function start(){
+  const st=document.getElementById('state');st.style.display='block';st.textContent='Loading live data from Google Sheets…';
+  LB.load().then(render).catch(e=>{
+    st.innerHTML=`<p class="err">Couldn't load live data.</p><p>${esc(e.message||e)}</p><button onclick="location.reload()" style="background:var(--ink);color:#fff;border:none;border-radius:6px;padding:9px 18px;font-weight:600;cursor:pointer">Retry</button>`;
+    document.getElementById('asof').textContent='Live data unavailable';});
+}
+start();
+})();
+</script>
+</body>
+</html>
