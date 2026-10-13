@@ -69,18 +69,43 @@
     return Math.round(p * 1e6) / 1e6;
   }
 
+  // gviz JSON -> [headerRow, ...dataRows] of strings (same shape as parseCSV).
+  // Uses each cell's raw value ("v": 0.813), so the sheet's number format cannot change the result.
+  function gvizJsonToRows(text) {
+    var start = text.indexOf('{'), end = text.lastIndexOf('}');
+    if (start < 0 || end < start) throw new Error('Unexpected response from Google Sheets');
+    var resp = JSON.parse(text.slice(start, end + 1));
+    if (resp.status === 'error') throw new Error((resp.errors && resp.errors[0] && resp.errors[0].detailed_message) || 'Google Sheets returned an error');
+    var cols = resp.table.cols || [];
+    function cellText(c) { return (c === null || c === undefined || c.v === null || c.v === undefined) ? '' : String(c.v); }
+    var rows = (resp.table.rows || []).map(function (r) { return cols.map(function (_, j) { return cellText((r.c || [])[j]); }); });
+    var header = cols.map(function (c) { return String(c.label || '').trim(); });
+    // If Google did not take row 1 as the header, it arrives as the first data row.
+    if (!header.some(function (h) { return /target|actual/i.test(h); }) && rows.length) { header = rows[0]; rows = rows.slice(1); }
+    rows = rows.filter(function (r) { return r.some(function (v) { return v.trim() !== ''; }); });
+    return [header].concat(rows);
+  }
+
+  // Returns rows; reads the JSON export first and falls back to the CSV export.
   function fetchTab(tab) {
-    var url = 'https://docs.google.com/spreadsheets/d/' + SPREADSHEET_ID +
-      '/gviz/tq?tqx=out:csv&sheet=' + encodeURIComponent(tab);
-    return fetch(url).then(function (res) {
-      if (!res.ok) throw new Error('Could not load tab "' + tab + '" (HTTP ' + res.status + ')');
+    var base = 'https://docs.google.com/spreadsheets/d/' + SPREADSHEET_ID + '/gviz/tq?sheet=' + encodeURIComponent(tab);
+    function viaCsv() {
+      return fetch(base + '&tqx=out:csv').then(function (res) {
+        if (!res.ok) throw new Error('Could not load tab "' + tab + '" (HTTP ' + res.status + ')');
+        return res.text();
+      }).then(parseCSV);
+    }
+    return fetch(base + '&tqx=out:json&headers=1').then(function (res) {
+      if (!res.ok) throw new Error('HTTP ' + res.status);
       return res.text();
+    }).then(gvizJsonToRows).catch(function (e) {
+      if (window.console) console.warn('JSON read of "' + tab + '" failed (' + e.message + '); using CSV export instead.');
+      return viaCsv();
     });
   }
 
   // Wide tab -> { months:[...], data:{Channel:{month:{t,a}}} }
-  function reshape(text, isPercent) {
-    var rows = parseCSV(text);
+  function reshape(rows, isPercent) {
     if (!rows.length) return { months: [], data: {} };
     var header = rows[0], months = [], colMap = {};
     for (var j = 1; j < header.length; j++) {
@@ -182,9 +207,9 @@
 
   function load() {
     var keys = Object.keys(TABS);
-    return Promise.all(keys.map(function (k) { return fetchTab(TABS[k]); })).then(function (texts) {
+    return Promise.all(keys.map(function (k) { return fetchTab(TABS[k]); })).then(function (tabRows) {
       var tabs = {};
-      keys.forEach(function (k, i) { tabs[k] = reshape(texts[i], COHORTS.indexOf(k) !== -1); });
+      keys.forEach(function (k, i) { tabs[k] = reshape(tabRows[i], COHORTS.indexOf(k) !== -1); });
       var accIdx = lastReported(tabs.Accrual), cashIdx = lastReported(tabs.Cash);
       var persIdx = Math.min.apply(null, COHORTS.map(function (k) { return lastReported(tabs[k]); }));
       if (accIdx < 0 || cashIdx < 0 || persIdx < 0) throw new Error('No reported actuals found in the sheet yet.');

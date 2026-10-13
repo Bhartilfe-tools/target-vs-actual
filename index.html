@@ -386,9 +386,34 @@ function pctVal(v){
   return Math.round(pct * 1e6) / 1e6;
 }
 
+// gviz JSON -> [headerRow, ...dataRows] of strings, same shape as the CSV parse.
+// The JSON carries each cell's raw value ("v": 0.813), so how a cell is formatted in the
+// sheet (0.00, 0.0%, 0.00%) no longer changes the numbers the dashboard reads.
+function gvizJsonToRows(text){
+  const start = text.indexOf('{'), end = text.lastIndexOf('}');
+  if(start < 0 || end < start) throw new Error('Unexpected response from Google Sheets');
+  const resp = JSON.parse(text.slice(start, end + 1));
+  if(resp.status === 'error') throw new Error((resp.errors && resp.errors[0] && resp.errors[0].detailed_message) || 'Google Sheets returned an error');
+  const cols = resp.table.cols || [];
+  const cellText = c => (c === null || c === undefined || c.v === null || c.v === undefined) ? '' : String(c.v);
+  let rows = (resp.table.rows || []).map(r => cols.map((_, j) => cellText((r.c || [])[j])));
+  let header = cols.map(c => String(c.label || '').trim());
+  // If Google did not take row 1 as the header, it arrives as the first data row.
+  if(!header.some(h => /target|actual/i.test(h)) && rows.length) { header = rows[0]; rows = rows.slice(1); }
+  rows = rows.filter(r => r.some(v => v.trim() !== ''));
+  return [header, ...rows];
+}
+
 async function fetchSheetTab(tabName){
-  const url = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tabName)}`;
-  const res = await fetch(url);
+  const base = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?sheet=${encodeURIComponent(tabName)}`;
+  try {
+    const res = await fetch(`${base}&tqx=out:json&headers=1`);
+    if(!res.ok) throw new Error(`HTTP ${res.status}`);
+    return gvizJsonToRows(await res.text());
+  } catch(jsonErr) {
+    console.warn(`JSON read of "${tabName}" failed (${jsonErr.message}); using CSV export instead.`);
+  }
+  const res = await fetch(`${base}&tqx=out:csv`);
   if(!res.ok) throw new Error(`Could not load tab "${tabName}" (HTTP ${res.status}). Check the sheet is published and the tab name matches exactly.`);
   const text = await res.text();
   const parsed = Papa.parse(text.trim(), {skipEmptyLines: true});
