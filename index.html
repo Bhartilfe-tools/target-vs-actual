@@ -4,6 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Target vs Actual — Channel Performance</title>
+<!-- PWA: one app for Persistency Times + Target vs Actual -->
+<link rel="manifest" href="/persistency-times/manifest.webmanifest">
+<meta name="theme-color" content="#1A1A18">
+<link rel="icon" type="image/png" sizes="192x192" href="/persistency-times/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/persistency-times/icons/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Persistency">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
@@ -323,12 +332,14 @@
     header, .tab-bar, main { padding-left: 16px; padding-right: 16px; }
   }
 </style>
+<style>.pt-home{display:inline-block;margin-top:10px;font-size:12.5px;font-weight:600;color:#fff;text-decoration:none;border:1px solid currentColor;border-radius:999px;padding:4px 12px;opacity:.85}.pt-home:hover{opacity:1}</style>
 </head>
 <body>
 
 <header>
   <h1>Target vs Actual — Channel Performance</h1>
   <div class="sub">FY27 vs FY26 &middot; Accrual, Cash Collection &amp; Persistency (13M&ndash;61M) &middot; Board Target</div>
+  <a class="pt-home" href="/persistency-times/">&larr; Persistency Times</a>
 </header>
 
 <div class="tab-bar" id="tab-bar"></div>
@@ -921,5 +932,60 @@ init();
 
 </script>
 
+<!-- PWA: offline copy, "saved copy" banner, refresh on return, open same-site links inside the app -->
+<script>
+(function () {
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () { navigator.serviceWorker.register('/target-vs-actual/sw.js', { scope: '/target-vs-actual/' }).catch(function (e) { console.warn('Service worker not registered', e); }); });
+
+    // The service worker says Sheet data came from the saved copy (offline or weak signal)
+    var oldest = null, bar = null;
+    function fmt(t) { return new Date(t).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true }); }
+    function relabel() {   // the pages' own "live" wording must not show on a saved copy
+      var b = document.getElementById('data-banner');
+      if (b && /\(live\)/.test(b.textContent)) b.textContent = b.textContent.replace('(live)', '(saved copy)');
+      var a = document.getElementById('asof');
+      if (a && /^Live from/.test(a.textContent)) a.innerHTML = a.innerHTML.replace(/^Live from/, 'Saved copy of');
+    }
+    function showBar() {
+      if (!bar) {
+        bar = document.createElement('button');
+        bar.type = 'button';
+        bar.className = 'pwa-saved-bar';
+        bar.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:9999;border:0;margin:0;width:100%;cursor:pointer;' +
+          'background:#B45309;color:#fff;font:600 13px/1.35 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;text-align:center;' +
+          'padding:calc(8px + env(safe-area-inset-top)) 16px 8px;box-shadow:0 2px 6px rgba(0,0,0,.2)';
+        bar.addEventListener('click', function () { location.reload(); });
+        document.body.appendChild(bar);
+        new MutationObserver(relabel).observe(document.body, { subtree: true, childList: true, characterData: true });
+      }
+      bar.textContent = (navigator.onLine ? 'Weak signal' : 'Offline') + ' · showing data saved on ' + (oldest ? fmt(oldest) : 'an earlier visit') + ' · tap to retry';
+      document.body.style.paddingTop = bar.offsetHeight + 'px';   // push the page down by the bar's real height (1 or 2 lines)
+      relabel();
+    }
+    navigator.serviceWorker.addEventListener('message', function (ev) {
+      if (!ev.data || ev.data.type !== 'pt-saved-copy') return;
+      if (ev.data.savedAt && (!oldest || ev.data.savedAt < oldest)) oldest = ev.data.savedAt;
+      if (document.body) showBar(); else document.addEventListener('DOMContentLoaded', showBar);
+    });
+    window.addEventListener('online', function () { if (bar) bar.textContent = 'Back online · tap to load the latest data'; });
+  }
+
+  // Coming back to the app after 15+ minutes in the background: load fresh data
+  var hiddenAt = 0;
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) { hiddenAt = Date.now(); return; }
+    if (hiddenAt && Date.now() - hiddenAt > 15 * 60 * 1000 && navigator.onLine) location.reload();
+  });
+
+  var inApp = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+  if (!inApp) return;
+  // In the installed app, links to our own dashboards open in the same app window instead of a browser tab
+  document.addEventListener('click', function (e) {
+    var a = e.target.closest && e.target.closest('a[target="_blank"]');
+    if (a && a.host === location.host) { e.preventDefault(); location.href = a.href; }
+  }, true);
+})();
+</script>
 </body>
 </html>
