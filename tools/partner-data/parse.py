@@ -121,6 +121,15 @@ for cohort, mm, a, b in SWAPS:
     pa, pb = banca[cohort][a], banca[cohort][b]
     pa[mm], pb[mm] = pb[mm], pa[mm]
 
+# BANCA 61M Sep'26: five rows were shuffled in the source sheet. Correct owner of each row, as confirmed
+# from the corrected sheet (bases match it; this mapping also reproduces the Grand Total % exactly).
+REASSIGN = {('61M', "Sep'26"): {'Fincare Bank': 'Paschim Banga Bank', 'Paschim Banga Bank': 'VKGB', 'Satara Bank': 'SBM Bank',
+                                'VKGB': 'Shivalik Bank', 'SBM Bank': 'Fincare Bank', 'Shivalik Bank': 'Satara Bank'}}
+for (cohort, mm), mapping in REASSIGN.items():
+    old = {n: banca[cohort][n].get(mm) for n in mapping.values()}
+    for new_name, from_name in mapping.items():
+        if old[from_name] is not None: banca[cohort].setdefault(new_name, {})[mm] = old[from_name]
+
 # Banca checks: partner bases add to grand total; base-weighted % equals grand total %
 for cohort, tm in banca_tot.items():
     for mm, t in tm.items():
