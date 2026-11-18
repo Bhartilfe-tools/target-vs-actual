@@ -326,6 +326,46 @@
     font-style: italic;
   }
 
+
+  /* ===== Partner-wise persistency (CAB, Banca) ===== */
+  .pp-controls { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; margin-bottom:14px; }
+  .pp-pills { display:inline-flex; background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:3px; gap:2px; }
+  .pp-pill { font-family:'IBM Plex Sans',sans-serif; font-size:12.5px; font-weight:600; color:var(--muted); background:transparent; border:none; border-radius:6px; padding:6px 11px; cursor:pointer; }
+  .pp-pill.active { background:var(--ink); color:#fff; }
+  .pp-month { font-size:12.5px; color:var(--muted); display:inline-flex; align-items:center; gap:6px; }
+  .pp-month select { font-family:'IBM Plex Sans',sans-serif; font-size:12.5px; font-weight:600; color:var(--ink); border:1px solid var(--border); border-radius:6px; padding:5px 8px; background:var(--surface); }
+  .pp-summary { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:14px; }
+  .pp-table-wrap { overflow-x:auto; border:1px solid var(--border); border-radius:8px; }
+  .pp-table { width:100%; border-collapse:collapse; font-size:13px; }
+  .pp-table th { text-align:right; font-size:10.5px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); font-weight:600; padding:9px 12px; background:var(--bg); border-bottom:1px solid var(--border); white-space:nowrap; }
+  .pp-table th:first-child, .pp-table td:first-child { text-align:left; }
+  .pp-table td { text-align:right; padding:8px 12px; border-bottom:1px solid var(--border); white-space:nowrap; }
+  .pp-table td.num { font-size:12.5px; }
+  .pp-table tr.pp-cat td { background:var(--target-tint); color:var(--target); font-weight:700; font-size:12px; }
+  .pp-table tr.pp-total td { background:var(--ink); color:#fff; font-weight:700; border-bottom:none; }
+  .pp-table tr.pp-total td .pp-chg { color:inherit; }
+  .pp-table tr:last-child td { border-bottom:none; }
+  .pp-ly { color:var(--muted); }
+  .pp-chg.good { color:var(--good); } .pp-chg.bad { color:var(--bad); }
+  .pp-note { font-size:11px; color:var(--muted); margin-top:10px; font-style:italic; }
+  @media (max-width: 800px) {
+    .pp-summary { grid-template-columns:repeat(3,1fr); gap:8px; }
+    .pp-summary .stat-card { padding:10px; }
+    .pp-summary .stat-card .value { font-size:17px; }
+    .pp-table th, .pp-table td { padding:8px 8px; }
+  }
+  /* Phones: drop the base column and use short headers so LY, CY and change fit without sideways scrolling */
+  .pp-short { display:none; }
+  @media (max-width: 600px) {
+    .pp-table { font-size:12.5px; }
+    .pp-table th, .pp-table td { padding:8px 6px; }
+    .pp-table td:first-child { white-space:normal; }
+    .pp-table .pp-base { display:none; }
+    .pp-full { display:none; } .pp-short { display:inline; }
+    .pp-summary .stat-card .value { font-size:15px; }
+    .pp-summary .stat-card .label { font-size:9.5px; }
+  }
+
   @media (max-width: 800px) {
     .stat-row { grid-template-columns: repeat(2, 1fr); }
     .cohort-grid { grid-template-columns: repeat(2, 1fr); }
@@ -356,6 +396,8 @@
 <main id="main" style="display:none;"></main>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<!-- Partner-wise persistency (LY and CY), from the partner MIS workbook -->
+<script src="partner-data.js"></script>
 <script>
 // ===== CONFIG: paste your Google Sheet ID here after creating it =====
 const SPREADSHEET_ID = "1d6EueHzDP36MMSy_4_5eHj0adAlg_xoL";
@@ -863,6 +905,124 @@ function buildCohortChart(canvasId, dataFY27, dataFY26) {
 
 let activeCohort = '13M';
 
+// ===== Partner-wise persistency — shown on any channel tab that has data in partner-data.js (now: Banca) =====
+// Data: partner-data.js (window.PARTNER_PERSISTENCY), built from the partner MIS workbook.
+// CY = chosen FY27 month, LY = the same month of FY26. Category sub-totals are base-weighted.
+const PARTNER_CHANNELS = ['CAB', 'Banca'];   // CAB shows up automatically once its data is added to partner-data.js
+const PP_CAT_ORDER = ['Platinum', 'Silver', 'Closed'];
+let partnerMonth = null;   // chosen CY month; null = latest month with data
+
+function ppData(ch) {
+  const P = window.PARTNER_PERSISTENCY;
+  return (P && P.channels && P.channels[ch]) ? P.channels[ch] : null;
+}
+function ppLyMonth(m) {               // "Oct'26" -> "Oct'25"
+  return m.slice(0, -2) + String(parseInt(m.slice(-2), 10) - 1).padStart(2, '0');
+}
+function ppCyMonths(ch, cohort) {     // FY27 months that have data for this cohort
+  const co = (ppData(ch) || {})[cohort];
+  if (!co) return [];
+  return MONTHS_FY27.filter(m => co.total[m] || co.partners.some(p => p.s[m]));
+}
+function ppWeighted(list) {           // [[base, pct], ...] -> base-weighted pct
+  const b = list.reduce((t, x) => t + x[0], 0);
+  return b > 0 ? list.reduce((t, x) => t + x[0] * x[1], 0) / b : null;
+}
+function ppChg(cy, ly) {
+  if (cy === null || cy === undefined || ly === null || ly === undefined) return '<span class="pp-chg">—</span>';
+  const d = cy - ly;
+  return `<span class="pp-chg ${d >= 0 ? 'good' : 'bad'}">${d >= 0 ? '▲ +' : '▼ '}${d.toFixed(1)}</span>`;
+}
+function ppBase(v) { return (v === null || v === undefined) ? '—' : v.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+
+function partnerSectionHtml(ch) {
+  if (!PARTNER_CHANNELS.includes(ch) || !ppData(ch)) return '';
+  return `
+    <div class="section" id="pp-section">
+      <div class="section-head">
+        <h2>Partner-wise Persistency — CY vs LY</h2>
+        <span class="unit-note">Same month, this year vs last year &middot; Base in Rs Cr</span>
+      </div>
+      <div class="pp-controls">
+        <div class="pp-pills" role="tablist">${COHORTS.map(c => `<button type="button" class="pp-pill" data-cohort="${c}">${c}</button>`).join('')}</div>
+        <label class="pp-month">Month <select id="pp-month"></select></label>
+      </div>
+      <div id="pp-body"></div>
+    </div>`;
+}
+
+function renderPartnerBody(ch, cohort) {
+  const body = document.getElementById('pp-body');
+  if (!body) return;
+  document.querySelectorAll('.pp-pill').forEach(b => b.classList.toggle('active', b.dataset.cohort === cohort));
+  const co = ppData(ch)[cohort];
+  const months = ppCyMonths(ch, cohort);
+  const sel = document.getElementById('pp-month');
+  if (!co || !months.length) {
+    sel.innerHTML = '';
+    body.innerHTML = '<div class="not-tracked" style="color:var(--muted);font-style:italic;padding:14px 0;">No partner-wise data for this cohort yet.</div>';
+    return;
+  }
+  const cy = (partnerMonth && months.includes(partnerMonth)) ? partnerMonth : months[months.length - 1];
+  const ly = ppLyMonth(cy);
+  sel.innerHTML = months.slice().reverse().map(m => `<option value="${m}"${m === cy ? ' selected' : ''}>${m} vs ${ppLyMonth(m)}</option>`).join('');
+
+  // Partners present in either month, grouped by their CY category
+  const rows = co.partners.map(p => {
+    const c = p.s[cy] || null, l = p.s[ly] || null;
+    return { name: p.name, cat: (c && c[2]) || (l && l[2]) || '', cy: c, ly: l };
+  }).filter(r => r.cy || r.ly);
+  const cats = [...new Set(rows.map(r => r.cat))].sort((a, b) => {
+    const ia = PP_CAT_ORDER.indexOf(a), ib = PP_CAT_ORDER.indexOf(b);
+    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+  });
+  const grouped = cats.length > 1 || cats[0] !== '';
+
+  let html = '';
+  cats.forEach(cat => {
+    const list = rows.filter(r => r.cat === cat).sort((a, b) => ((b.cy || [0])[0]) - ((a.cy || [0])[0]));
+    if (grouped) {
+      const cyW = ppWeighted(list.filter(r => r.cy).map(r => r.cy));
+      const lyW = ppWeighted(list.filter(r => r.ly).map(r => r.ly));
+      const cyB = list.reduce((t, r) => t + (r.cy ? r.cy[0] : 0), 0);
+      html += `<tr class="pp-cat"><td>${cat || 'Other'} (${list.length})</td><td class="num pp-base">${ppBase(cyB)}</td><td class="num">${fmtPct(lyW)}</td><td class="num">${fmtPct(cyW)}</td><td class="num">${ppChg(cyW, lyW)}</td></tr>`;
+    }
+    list.forEach(r => {
+      const c = r.cy ? r.cy[1] : null, l = r.ly ? r.ly[1] : null;
+      html += `<tr><td>${r.name}</td><td class="num pp-base">${ppBase(r.cy ? r.cy[0] : null)}</td><td class="num pp-ly">${fmtPct(l)}</td><td class="num">${fmtPct(c)}</td><td class="num">${ppChg(c, l)}</td></tr>`;
+    });
+  });
+  const tc = co.total[cy] || null, tl = co.total[ly] || null;
+  html += `<tr class="pp-total"><td>${ch} total</td><td class="num pp-base">${ppBase(tc ? tc[0] : null)}</td><td class="num">${fmtPct(tl ? tl[1] : null)}</td><td class="num">${fmtPct(tc ? tc[1] : null)}</td><td class="num">${ppChg(tc ? tc[1] : null, tl ? tl[1] : null)}</td></tr>`;
+
+  const listedBase = rows.reduce((t, r) => t + (r.cy ? r.cy[0] : 0), 0);
+  const gapNote = (tc && Math.abs(tc[0] - listedBase) > 0.05)
+    ? `<div class="pp-note">Partners listed add up to Rs ${ppBase(listedBase)} Cr of the Rs ${ppBase(tc[0])} Cr ${ch} ${cohort} base in ${cy}; the difference is in the source sheet.</div>` : '';
+  const P = window.PARTNER_PERSISTENCY;
+
+  body.innerHTML = `
+    <div class="pp-summary">
+      <div class="stat-card"><div class="label">${ch} ${cohort} · ${ly} (LY)</div><div class="value num" style="color:var(--muted)">${fmtPct(tl ? tl[1] : null)}</div></div>
+      <div class="stat-card"><div class="label">${ch} ${cohort} · ${cy} (CY)</div><div class="value actual num">${fmtPct(tc ? tc[1] : null)}</div></div>
+      <div class="stat-card"><div class="label">Change vs LY</div><div class="value num">${(tc && tl) ? ((tc[1] - tl[1] >= 0 ? '+' : '') + (tc[1] - tl[1]).toFixed(1) + ' pts') : '—'}</div>
+        ${(tc && tl) ? `<div class="delta ${tc[1] >= tl[1] ? 'good' : 'bad'}">${tc[1] >= tl[1] ? '▲ better than LY' : '▼ below LY'}</div>` : ''}</div>
+    </div>
+    <div class="pp-table-wrap"><table class="pp-table">
+      <thead><tr><th>Partner</th><th class="pp-base">Base ${cy}</th><th><span class="pp-full">${ly} (LY)</span><span class="pp-short">LY</span></th><th><span class="pp-full">${cy} (CY)</span><span class="pp-short">CY</span></th><th><span class="pp-full">Change (pts)</span><span class="pp-short">Chg</span></th></tr></thead>
+      <tbody>${html}</tbody>
+    </table></div>
+    ${gapNote}
+    ${P.source ? `<div class="pp-note">Source: ${P.source}.</div>` : ''}`;
+}
+
+function wirePartnerSection(ch) {
+  const sec = document.getElementById('pp-section');
+  if (!sec) return;
+  sec.querySelectorAll('.pp-pill').forEach(b => b.addEventListener('click', () => setActiveCohort(b.dataset.cohort)));
+  document.getElementById('pp-month').addEventListener('change', e => { partnerMonth = e.target.value; renderPartnerBody(ch, activeCohort); });
+  renderPartnerBody(ch, activeCohort);
+}
+
 function renderChannel(ch) {
   destroyCharts();
   currentChannel = ch;
@@ -893,6 +1053,8 @@ function renderChannel(ch) {
       </div>
       <div class="chart-wrap"><canvas id="chart_cohort"></canvas></div>
     </div>
+
+    ${partnerSectionHtml(ch)}
   `;
 
   document.getElementById('view-switch').addEventListener('click', toggleMetricView);
@@ -901,15 +1063,20 @@ function renderChannel(ch) {
   const grid = document.getElementById('cohort-grid');
   grid.innerHTML = COHORTS.map(c => cohortCard(c, d.persistency[c].FY27, d.persistency[c].FY26, c === activeCohort)).join('');
   grid.querySelectorAll('.cohort-card[data-cohort]').forEach(card => {
-    card.addEventListener('click', () => {
-      activeCohort = card.dataset.cohort;
-      grid.querySelectorAll('.cohort-card').forEach(c => c.classList.remove('active'));
-      card.classList.add('active');
-      if (charts['cohort']) charts['cohort'].destroy();
-      charts['cohort'] = safeBuildChart(() => buildCohortChart('chart_cohort', d.persistency[activeCohort].FY27, d.persistency[activeCohort].FY26));
-    });
+    card.addEventListener('click', () => setActiveCohort(card.dataset.cohort));
   });
   charts['cohort'] = safeBuildChart(() => buildCohortChart('chart_cohort', d.persistency[activeCohort].FY27, d.persistency[activeCohort].FY26));
+  wirePartnerSection(ch);
+}
+
+// One cohort choice drives the cohort cards, the cohort chart and the partner table.
+function setActiveCohort(cohort) {
+  activeCohort = cohort;
+  const d = RAW_DATA[currentChannel];
+  document.querySelectorAll('#cohort-grid .cohort-card').forEach(c => c.classList.toggle('active', c.dataset.cohort === cohort));
+  if (charts['cohort']) charts['cohort'].destroy();
+  charts['cohort'] = safeBuildChart(() => buildCohortChart('chart_cohort', d.persistency[cohort].FY27, d.persistency[cohort].FY26));
+  renderPartnerBody(currentChannel, cohort);
 }
 
 async function init(){

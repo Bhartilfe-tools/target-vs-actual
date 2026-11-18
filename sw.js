@@ -6,11 +6,12 @@
    Whenever Sheet data comes from the saved copy, the page is told (with the time it was
    saved) so it can say "showing data saved on …" instead of looking live.
    Bump VERSION to clear old copies. */
-const VERSION = 'target-vs-actual-v1';
+const VERSION = 'target-vs-actual-v2';
 const SHELL = [
   '/target-vs-actual/',
   '/target-vs-actual/leaderboard.html',
-  '/target-vs-actual/leaderboard-core.js'
+  '/target-vs-actual/leaderboard-core.js',
+  '/target-vs-actual/partner-data.js'
 ];
 const TIMEOUT_MS = 5000;
 
